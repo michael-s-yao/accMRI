@@ -1,0 +1,28 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# DS Store
+*.DS_Store
+
+# fastMRI data
+common/data/knee
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Environments
+env/
+
+# PyTorch Lightning logs
+discriminator/lightning_logs/
+reconstructor/lightning_logs/
+sampler/lightning_logs/
+
+# Image reconstructions
+reconstructor/reconstructions/
+
+# Powerpoint figures 
+*.pptx
+*.ppt
