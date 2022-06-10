@@ -109,8 +109,9 @@ class VarNetBlock(nn.Module):
         self.is_multicoil = is_multicoil
         self.dc_weight = nn.Parameter(torch.ones(1))
 
+    @staticmethod
     def sens_expand(
-        self, x: torch.Tensor, sens_maps: torch.Tensor
+        x: torch.Tensor, sens_maps: torch.Tensor
     ) -> torch.Tensor:
         """
         Applies the expand operator that computes the images seen by each coil
@@ -123,8 +124,9 @@ class VarNetBlock(nn.Module):
         """
         return fft2c(complex_mul(x, sens_maps))
 
+    @staticmethod
     def sens_reduce(
-        self, x: torch.Tensor, sens_maps: torch.Tensor
+        x: torch.Tensor, sens_maps: torch.Tensor
     ) -> torch.Tensor:
         """
         Applies the reduce operator that combines the individual coil images.
@@ -163,8 +165,9 @@ class VarNetBlock(nn.Module):
             zeros
         )
         if self.is_multicoil:
-            model_term = self.sens_expand(
-                self.model(self.sens_reduce(pred_kspace, sens_maps)), sens_maps
+            model_term = VarNet.sens_expand(
+                self.model(VarNet.sens_reduce(pred_kspace, sens_maps)),
+                sens_maps
             )
         else:
             model_term = self.model(pred_kspace)

@@ -9,10 +9,16 @@ Licensed under the MIT License.
 import matplotlib.pyplot as plt
 from multiprocessing import Queue
 import numpy as np
+import sys
 import time
 import torch
 from typing import Optional
 from scanner import KSpaceData
+
+sys.path.append(".")
+from discriminator.models.discriminator import Discriminator
+from reconstructor.models.reconstructor import Reconstructor
+from sampler.models.sampler import Sampler
 
 
 class ComputeCluster:

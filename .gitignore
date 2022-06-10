@@ -26,3 +26,6 @@ reconstructor/reconstructions/
 # Powerpoint figures 
 *.pptx
 *.ppt
+
+# Vim
+*.swp

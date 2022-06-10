@@ -15,21 +15,22 @@ import torch
 from typing import NamedTuple, Optional, Sequence, Union
 
 
-class MemorySample(NamedTuple):
-    masked_kspace: torch.Tensor
+class BufferSample(NamedTuple):
+    ref_kspace: torch.Tensor
     acquired_mask: torch.Tensor
-    action: torch.Tensor
-    next_kspace: torch.Tensor
+    action_buffer: torch.Tensor
     reward: torch.Tensor
     done: torch.Tensor
+    sens_maps: torch.Tensor
 
 
-class ReplayMemory:
+class ReplayBuffer:
     """Replay buffer for active MRI acquisition using a Double DQN."""
 
     def __init__(
         self,
-        obs_shape: Union[tuple, torch.Size] = None,
+        obs_shape: Union[tuple, torch.Size],
+        action_buffer_size: int,
         capacity: int = 1000,
         batch_size: int = 2,
         burn_in: int = 100,
@@ -40,6 +41,7 @@ class ReplayMemory:
         """
         Args:
             obs_shape: the shape of the tensors representing kspace (BCHW2).
+            action_buffer_size: the number of actions that can be stored.
             capacity: how many transitions can be stored. After capcity is
                 reached, early transitions are overwritten in FIFO fashion.
             batch_size: batch_size returned by the replay buffer.
@@ -67,14 +69,16 @@ class ReplayMemory:
         self.kspace_data = -1.0 * torch.ones(
             (capacity, c, h, w, d), dtype=torch.float32
         )
+        self.is_multicoil = c > 1
+        if self.is_multicoil:
+            self.sens_maps_data = -1.0 * torch.ones(
+                (capacity, c, h, w, d), dtype=torch.float32
+            )
         self.mask_data = -1.0 * torch.ones(
             (capacity, w), dtype=torch.float32
         )
         self.actions = -1.0 * torch.ones(
-            (capacity, max_lines), dtype=torch.float32
-        )
-        self.next_kspace_data = -1.0 * torch.ones(
-            (capacity, c, h, w, d), dtype=torch.float32
+            (capacity, action_buffer_size, w), dtype=torch.float32
         )
         self.rewards = torch.zeros(capacity, dtype=torch.float32)
         self.dones = torch.zeros(capacity, dtype=torch.bool)
@@ -83,47 +87,38 @@ class ReplayMemory:
 
     def push(
         self,
-        masked_kspace: torch.Tensor,
+        ref_kspace: torch.Tensor,
         acquired_mask: torch.Tensor,
-        action: torch.Tensor,
-        next_kspace: torch.Tensor,
+        action_buffer: torch.Tensor,
         reward: float,
-        done: bool
+        done: bool,
+        sens_maps: Optional[torch.Tensor] = None
     ) -> None:
         """
         Records a transition into the replay buffer.
         Input:
-            masked_kspace: zero-filled acquired kspace data of shape CHW2.
+            ref_kspace: fully-sampled kspace data of shape CHW2.
             acquired_mask: mask of currently acquired data of shape W.
-            action: the sequence of kspace lines that was sampled according
-                to some sampling policy based on the input observation of
-                shape BW.
-            next_kspace: zero-filled acquired kspace data after acquisition
-                step of shape CHW2.
+            action_buffer: the mask of kspace lines that will be sampled next
+                according to some sampling policy based on the input
+                observation of shape KW (K is the capacity of the buffer).
             reward: the reward associated with choosing to make the particular
                 next_observation observation next.
             done: whether or not the acquisition is done.
+            sens_maps: sensitivity maps (required if data is multicoil).
         Returns:
             None. The transition is recorded into the replay buffer.
         """
         position = self.count % self.capacity
-        self.kspace_data[position] = masked_kspace.clone()
-        self.mask_data[position] = acquired_mask.clone()
-
-        action = torch.squeeze(action)
-        if action.size()[0] > self.max_lines:
-            action = action[:self.max_lines]
-        elif action.size()[0] < self.max_lines:
-            action = torch.cat((
-                action,
-                -1.0 * torch.ones(
-                    self.max_lines - action.size()[0], dtype=torch.float32
+        if self.is_multicoil:
+            if sens_maps is None:
+                raise ValueError(
+                    "Sensitivity maps are a required for multicoil data."
                 )
-            ))
-        self.actions[position] = action
-
-        self.next_kspace_data[position] = next_kspace.clone()
-
+            self.sens_maps_data[position] = sens_maps.clone()
+        self.kspace_data[position] = ref_kspace.clone()
+        self.mask_data[position] = acquired_mask.clone()
+        self.actions[position] = action_buffer.clone()
         self.rewards[position] = torch.tensor(
             [reward], dtype=torch.float32
         )
@@ -131,13 +126,13 @@ class ReplayMemory:
 
         self.count += 1
 
-    def sample(self) -> Optional[MemorySample]:
+    def sample(self) -> Optional[BufferSample]:
         """
         Samples a batch of transitions from the replay buffer.
         Input:
             None.
         Returns:
-            A MemorySample object, or none if the number of entries is less
+            A BufferSample object, or none if the number of entries is less
                 than `self.burn_in`.
         """
         if self.count < self.burn_in:
@@ -145,13 +140,13 @@ class ReplayMemory:
         indices = self.rng.choice(
             min(self.count - 1, self.capacity), self.batch_size
         )
-        return MemorySample(
+        return BufferSample(
             self.kspace_data[indices],
             self.mask_data[indices],
             self.actions[indices],
-            self.next_kspace_data[indices],
             self.rewards[indices],
-            self.dones[indices]
+            self.dones[indices],
+            self.sens_maps_data[indices],
         )
 
     def save(self, filepath: str = "buffer.pt") -> Sequence[str]:
@@ -185,9 +180,9 @@ class ReplayMemory:
             "kspace_data": self.kspace_data,
             "mask_data": self.next_kspace_data,
             "actions": self.actions,
-            "next_kspace_data": self.next_kspace_data,
             "rewards": self.rewards,
             "dones": self.dones,
+            "sens_maps_data": self.sens_maps_data,
             "params": params
         }
         torch.save(data, filepath)
@@ -224,8 +219,8 @@ class ReplayMemory:
         self.kspace_data = data["kspace_data"]
         self.mask_data = data["mask_data"]
         self.actions = data["actions"]
-        self.next_kspace_data = data["next_kspace_data"]
         self.rewards = data["rewards"]
         self.dones = data["dones"]
+        self.sens_maps_data = data["sens_maps_data"]
 
         return

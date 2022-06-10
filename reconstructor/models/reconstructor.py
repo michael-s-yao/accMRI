@@ -36,7 +36,7 @@ class Reconstructor(nn.Module):
         """
         Args:
             kspace_size: size of input kspace data of shape BCHW2.
-            model: reconstructor model. One of ["varnet", "unet"].
+            model: reconstructor model. One of [`varnet`, `unet`].
             sens_chans: number of channels for sensitivity map UNet.
             sens_pools: number of down- and up- sampling layers for sensitivity
                 map UNet.

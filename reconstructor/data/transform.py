@@ -93,7 +93,7 @@ class ReconstructorDataTransform:
             masked_kspace = T.apply_mask(kspace, mask)
             num_low_frequencies = round(w * center_frac)
         else:
-            masked_kspace = kspace
+            masked_kspace = kspace.clone()
             mask = self.fit_mask(
                 mask.type(torch.float32), masked_kspace.size()
             )
