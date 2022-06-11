@@ -43,7 +43,8 @@ class ReconstructorDataset(Dataset):
         self,
         data_path: str,
         transform: Callable,
-        seed: Optional[int] = None
+        seed: Optional[int] = None,
+        fast_dev_run: bool = False
     ):
         """
         Args:
@@ -51,12 +52,21 @@ class ReconstructorDataset(Dataset):
             transform: an optional callable object that pre-processes the raw
                 data into the appropriate form.
             seed: optional random seed for determining order of dataset.
+            fast_dev_run: whether we are running a test fast_dev_run.
         """
         super().__init__()
         self.transform = transform
+        self.fast_dev_run = fast_dev_run
 
-        data = os.listdir(data_path)
-        fns = [f for f in data if os.path.isfile(os.path.join(data_path, f))]
+        if os.path.isdir(data_path):
+            data = os.listdir(data_path)
+            fns = [f for f in data if os.path.isfile(os.path.join(data_path, f))]
+        elif os.path.isfile(data_path):
+            fns = [data_path]
+        else:
+            raise ValueError(f"{data_path} is not a valid data path.")
+        if self.fast_dev_run:
+            fns = fns[:16]
         self.data_path = data_path
         self.fns = fns
         self.data = []

@@ -30,6 +30,8 @@ class SSIMLoss(nn.Module):
         self.register_buffer(
             "w", torch.ones((1, 1, win_size, win_size)) / win_size ** 2
         )
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.w = self.w.to(device)
         # Normalization factor when calculating variance or covariance below.
         self.cov_norm = (win_size ** 2) / ((win_size ** 2) - 1)
 
@@ -100,6 +102,8 @@ def structural_similarity(
         raise ValueError(f"Unexpected input sizes {X.size()} and {Y.size()}")
 
     w = torch.ones((1, 1, win_size, win_size)) / win_size ** 2
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    w = w.to(device)
 
     # Normalization factor when calculating variance or covariance below.
     cov_norm = (win_size ** 2) / ((win_size ** 2) - 1)

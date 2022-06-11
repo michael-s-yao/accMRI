@@ -15,12 +15,8 @@ common/data/knee
 # Environments
 env/
 
-# PyTorch Lightning logs
-discriminator/lightning_logs/
-reconstructor/lightning_logs/
-sampler/lightning_logs/
-
 # Image reconstructions
+reconstructor/reconstructions_v*/
 reconstructor/reconstructions/
 
 # Powerpoint figures 
@@ -29,3 +25,12 @@ reconstructor/reconstructions/
 
 # Vim
 *.swp
+
+# Log files
+*.log
+lightning_logs/
+
+# Amulet
+.amltconfig
+.amltignore
+*.yaml

@@ -6,15 +6,17 @@ Author(s):
 
 Licensed under the MIT License.
 """
-from args import build_args
+from args import Main 
 import pytorch_lightning as pl
+from pytorch_lightning.callbacks import ModelCheckpoint
 import time
+import torch
 from pl_modules.data_module import DataModule
 from pl_modules.reconstructor_module import ReconstructorModule
 
 
 def main():
-    args = build_args()
+    args = Main.build_args()
 
     seed = args.seed
     if seed is None or seed < 0:
@@ -38,7 +40,8 @@ def main():
         batch_size=args.batch_size,
         num_workers=args.num_workers,
         center_crop=args.center_crop,
-        seed=seed
+        seed=seed,
+        fast_dev_run=args.fast_dev_run
     )
     h, w = args.center_crop
     kspace_size = (args.batch_size, num_coils, h, w, 2)
@@ -58,12 +61,28 @@ def main():
         num_log_images=args.num_log_images
     )
     log_every_n_steps = 1 if args.fast_dev_run else 50
-    trainer = pl.Trainer(
-        max_epochs=args.max_epochs,
-        fast_dev_run=args.fast_dev_run,
-        log_every_n_steps=log_every_n_steps,
-
+    start = str(int(time.time()))
+    checkpoint_callback = ModelCheckpoint(
+        every_n_epochs=5,
+        filename=("reconstructor-" + start + "-{epoch}-{validation_loss}"),
+        monitor="validation_loss"
     )
+    if torch.cuda.is_available():
+        trainer = pl.Trainer(
+            max_epochs=args.max_epochs,
+            fast_dev_run=args.fast_dev_run,
+            log_every_n_steps=log_every_n_steps,
+            callbacks=[checkpoint_callback],
+            accelerator="gpu",
+            devices=1
+        )
+    else:
+        trainer = pl.Trainer(
+            max_epochs=args.max_epochs,
+            fast_dev_run=args.fast_dev_run,
+            log_every_n_steps=log_every_n_steps,
+            callbacks=[checkpoint_callback],
+        )
     if args.mode.lower() in ("both", "train"):
         trainer.fit(model, datamodule=datamodule)
     if args.mode.lower() in ("both", "test"):

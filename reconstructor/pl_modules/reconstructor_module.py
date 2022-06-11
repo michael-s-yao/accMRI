@@ -223,6 +223,8 @@ class ReconstructorModule(pl.LightningModule):
         }
 
     def log_image(self, name: str, image: torch.Tensor) -> None:
+        if torch.max(image) <= 1.0:
+            image = image * 255.0
         self.logger.experiment.add_image(
             name, image, global_step=self.global_step
         )
@@ -251,6 +253,45 @@ class ReconstructorModule(pl.LightningModule):
             "fname": batch.fn,
             "slice_num": batch.slice_idx,
             "output": output.cpu().detach().numpy(),
+        }
+
+    def predict_step(self, batch, batch_idx):
+        output = self(batch.masked_kspace, batch.mask)
+
+        # Check for FLAIR 203 (always assuming square image reconstructions).
+        if self.kspace_size[0] > 1:
+            min_crop_size = batch.crop_size[0]
+            for crop_size in batch.crop_size:
+                if crop_size[-1] < min_crop_size[-1]:
+                    min_crop_size = crop_size
+            if output.size()[-1] < min_crop_size[-1]:
+                crop_size = (output.size()[-1], output.size()[-1])
+            else:
+                crop_size = min_crop_size
+        else:
+            if output.size()[-1] < batch.crop_size[-1]:
+                crop_size = (output.size()[-1], output.size()[-1])
+            else:
+                crop_size = batch.crop_size
+
+        output = T.center_crop(output, crop_size)
+        if batch.target is not None and batch.target.ndim > 1:
+            if batch.target.ndim < 3:
+                target = torch.unsqueeze(batch.target, dim=0)
+            else:
+                target = batch.target
+            if output.ndim < 3:
+                output = torch.unsqueeze(output, dim=0)
+            ssim = 1 - self.loss(
+                output.unsqueeze(0), target.unsqueeze(0), batch.max_value
+            )
+        else:
+            ssim = -1
+        return {
+            "fname": batch.fn,
+            "slice_num": batch.slice_idx,
+            "output": output.cpu().detach().numpy() * 255.0,
+            "ssim": ssim
         }
 
     def configure_optimizers(self):

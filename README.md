@@ -1,7 +1,7 @@
 # A Practical Framework for Accelerated MRI
 
 [![LICENSE](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE.md)
-[![ORGANIZATION](https://img.shields.io/badge/Microsoft-0078d4?style=flat&logo=microsoft&logoColor=white)](https://www.microsoft.com/en-us/research/)
+[![ORGANIZATION](https://img.shields.io/badge/Microsoft%20Research-0078d4?style=flat&logo=microsoft&logoColor=white)](https://www.microsoft.com/en-us/research/)
 [![CONTACT](https://img.shields.io/badge/contact-michael.yao%40pennmedicine.upenn.edu-blue)](mailto:michael.yao@pennmedicine.upenn.edu)
 
 In this work, we provide a practical framework for accelerated MRI imaging that builds on previous work to learn the following three tasks:

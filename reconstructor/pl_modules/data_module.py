@@ -31,7 +31,8 @@ class DataModule(pl.LightningDataModule):
         batch_size: int = 1,
         center_crop: Union[torch.Size, tuple] = (640, 368,),
         num_workers: int = 4,
-        seed: Optional[int] = None
+        seed: Optional[int] = None,
+        fast_dev_run: bool = False,
     ):
         """
         Args:
@@ -44,12 +45,27 @@ class DataModule(pl.LightningDataModule):
                 size to.
             num_workers: number of workers for PyTorch dataloaders.
             seed: optional random seed for determining order of dataset.
+            fast_dev_run: whether we are running a test fast_dev_run.
         """
         super().__init__()
 
         self.data_path = data_path
         self.batch_size = batch_size
         self.num_workers = num_workers
+
+        # If all of train_dir, val_dir, and test_dir are None, then we are
+        # predicting reconstructions.
+        if train_dir is None and val_dir is None and test_dir is None:
+            self.predict = ReconstructorDataset(
+                self.data_path,
+                ReconstructorDataTransform(
+                    center_crop=center_crop,
+                    seed=seed,
+                ),
+                seed=seed,
+            )
+            return
+
         self.train = ReconstructorDataset(
             str(os.path.join(self.data_path, train_dir)),
             ReconstructorDataTransform(
@@ -58,6 +74,7 @@ class DataModule(pl.LightningDataModule):
                 seed=seed
             ),
             seed=seed,
+            fast_dev_run=fast_dev_run
         )
         self.val = ReconstructorDataset(
             str(os.path.join(self.data_path, val_dir)),
@@ -67,6 +84,7 @@ class DataModule(pl.LightningDataModule):
                 seed=seed,
             ),
             seed=seed,
+            fast_dev_run=fast_dev_run
         )
         self.test = ReconstructorDataset(
             str(os.path.join(self.data_path, test_dir)),
@@ -74,7 +92,10 @@ class DataModule(pl.LightningDataModule):
                 center_crop=center_crop,
                 seed=seed,
             ),
+            seed=seed,
+            fast_dev_run=fast_dev_run
         )
+        self.predict = None
 
     def train_dataloader(self):
         """Returns the training dataloader."""
@@ -100,6 +121,12 @@ class DataModule(pl.LightningDataModule):
             collate_fn=test_collate_fn,
             num_workers=self.num_workers
         )
+
+    def predict_dataloader(self):
+        """Return the prediction set dataloader."""
+        if self.predict is None:
+            return None
+        return DataLoader(self.predict, num_workers=self.num_workers)
 
 
 def collate_fn(data):

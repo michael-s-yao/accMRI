@@ -10,11 +10,13 @@ Licensed under the MIT License.
 import h5py
 import matplotlib.pyplot as plt
 import numpy as np
+import sys
 import torch
 import pathlib
 from typing import Dict, Optional
 
-from models.loss import structural_similarity
+sys.path.append("..")
+from reconstructor.models.loss import structural_similarity
 
 
 def mse(target: torch.Tensor, pred: torch.Tensor) -> torch.Tensor:
@@ -67,7 +69,8 @@ def ssim(
 def save_reconstructions(
     outputs: Dict[str, np.ndarray],
     save_path: pathlib.Path,
-    save_png: bool = False
+    save_png: bool = False,
+    max_count: int = 16
 ):
     """
     Save reconstruction images.
@@ -77,6 +80,7 @@ def save_reconstructions(
         save_path: pathlib.Path object to the output directory where the
             reconstructions should be saved.
         save_png: whether to save pngs of the outputs as well.
+        max_count: maximum number of reconstructions to save. Default 16.
     Returns:
         None.
     """
@@ -84,7 +88,10 @@ def save_reconstructions(
     if save_png:
         (save_path / "images").mkdir(exist_ok=True, parents=True)
 
+    count = 0
     for fname, recons in outputs.items():
+        if count > max_count:
+            break
         if fname.endswith(".h5"):
             fname = fname[:-3]
         hf = h5py.File(save_path / (fname + ".h5"), "w")
@@ -94,8 +101,11 @@ def save_reconstructions(
             continue
         (save_path / "images" / fname).mkdir(exist_ok=True, parents=True)
         for i in range(recons.shape[0]):
+            if np.max(recons[i]) <= 1.0:
+                recons[i] = recons[i] * 255.0
             plt.imsave(
                 save_path / "images" / fname / (str(i) + ".png"),
                 recons[i],
                 cmap="gray"
             )
+        count += 1

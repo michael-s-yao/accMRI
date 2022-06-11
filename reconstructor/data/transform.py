@@ -80,6 +80,9 @@ class ReconstructorDataTransform:
             metadata["recon_size"][1],
         )
 
+        # Add a coil dimension to singlecoil data.
+        if kspace.ndim < 4:
+            kspace = torch.unsqueeze(kspace, dim=0)
         if self.center_crop is not None:
             kspace = T.center_crop(
                 kspace.permute(-1, 0, 1, 2), self.center_crop
