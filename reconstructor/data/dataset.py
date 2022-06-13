@@ -44,7 +44,8 @@ class ReconstructorDataset(Dataset):
         data_path: str,
         transform: Callable,
         seed: Optional[int] = None,
-        fast_dev_run: bool = False
+        fast_dev_run: bool = False,
+        multicoil: bool = False,
     ):
         """
         Args:
@@ -53,6 +54,7 @@ class ReconstructorDataset(Dataset):
                 data into the appropriate form.
             seed: optional random seed for determining order of dataset.
             fast_dev_run: whether we are running a test fast_dev_run.
+            multicoil: whether we are using multicoil data or not.
         """
         super().__init__()
         self.transform = transform
@@ -61,12 +63,11 @@ class ReconstructorDataset(Dataset):
         if os.path.isdir(data_path):
             data = os.listdir(data_path)
             fns = [f for f in data if os.path.isfile(os.path.join(data_path, f))]
+            fns = fns[:8] # Debugging
         elif os.path.isfile(data_path):
             fns = [data_path]
         else:
             raise ValueError(f"{data_path} is not a valid data path.")
-        if self.fast_dev_run:
-            fns = fns[:16]
         self.data_path = data_path
         self.fns = fns
         self.data = []
@@ -80,7 +81,9 @@ class ReconstructorDataset(Dataset):
         self.rng.shuffle(self.data)
 
         # Reconstruction target, per fastMRI dataset documentation.
-        self.recons_key = "reconstruction_rss"
+        self.recons_key = "reconstruction_esc"
+        if multicoil:
+            self.recons_key = "reconstruction_rss"
 
     def __len__(self) -> int:
         """

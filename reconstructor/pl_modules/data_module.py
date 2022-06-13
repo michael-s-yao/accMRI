@@ -63,9 +63,11 @@ class DataModule(pl.LightningDataModule):
                     seed=seed,
                 ),
                 seed=seed,
+                multicoil=multicoil
             )
             return
 
+        multicoil = "multicoil" in train_dir.lower()
         self.train = ReconstructorDataset(
             str(os.path.join(self.data_path, train_dir)),
             ReconstructorDataTransform(
@@ -74,7 +76,8 @@ class DataModule(pl.LightningDataModule):
                 seed=seed
             ),
             seed=seed,
-            fast_dev_run=fast_dev_run
+            fast_dev_run=fast_dev_run,
+            multicoil=multicoil
         )
         self.val = ReconstructorDataset(
             str(os.path.join(self.data_path, val_dir)),
@@ -84,7 +87,8 @@ class DataModule(pl.LightningDataModule):
                 seed=seed,
             ),
             seed=seed,
-            fast_dev_run=fast_dev_run
+            fast_dev_run=fast_dev_run,
+            multicoil=multicoil
         )
         self.test = ReconstructorDataset(
             str(os.path.join(self.data_path, test_dir)),
@@ -93,7 +97,8 @@ class DataModule(pl.LightningDataModule):
                 seed=seed,
             ),
             seed=seed,
-            fast_dev_run=fast_dev_run
+            fast_dev_run=fast_dev_run,
+            multicoil=multicoil
         )
         self.predict = None
 

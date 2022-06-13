@@ -132,6 +132,20 @@ class ReconstructorModule(pl.LightningModule):
         target, output = T.center_crop_to_smallest(batch.target, output)
         output = T.scale_max_value(output, batch.max_value)
 
+        val_loss = self.loss(
+            output.unsqueeze(1),
+            target.unsqueeze(1),
+            data_range=batch.max_value
+        )
+        print(
+            "LOGGING",
+            self.global_step,
+            list(torch.where(batch.mask > 0.0)[-1].detach().cpu().numpy()),
+            list(torch.where(batch.center_mask > 0.0)[-1].detach().cpu().numpy()),
+            batch.masked_kspace.size()[-2],
+            1 - val_loss,
+        )
+
         return {
             "batch_idx": batch_idx,
             "fname": batch.fn,
@@ -139,11 +153,7 @@ class ReconstructorModule(pl.LightningModule):
             "max_value": batch.max_value,
             "output": output,
             "target": target,
-            "val_loss": self.loss(
-                output.unsqueeze(1),
-                target.unsqueeze(1),
-                data_range=batch.max_value
-            ),
+            "val_loss": val_loss,
         }
 
     def validation_step_end(self, val_logs):

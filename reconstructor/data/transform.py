@@ -15,6 +15,7 @@ from typing import Optional, Sequence, Tuple, Union
 from data.dataset import ReconstructorSample
 
 sys.path.append("..")
+import common.utils.math as M
 import common.utils.transforms as T
 
 
@@ -68,25 +69,35 @@ class ReconstructorDataTransform:
         Returns:
             A ReconstructorSample object.
         """
-        if target is not None:
-            target = T.to_tensor(target)
-            max_value = metadata["max"]
-        else:
-            target = torch.tensor(0)
-            max_value = 0.0
-
-        crop_size = (
-            metadata["recon_size"][0],
-            metadata["recon_size"][1],
-        )
-
         # Add a coil dimension to singlecoil data.
         if kspace.ndim < 4:
             kspace = torch.unsqueeze(kspace, dim=0)
         if self.center_crop is not None:
             kspace = T.center_crop(
-                kspace.permute(-1, 0, 1, 2), self.center_crop
-            ).permute(1, 2, 3, 0)
+                kspace.permute(0, -1, 1, 2), self.center_crop
+            ).permute(0, 2, 3, 1)
+
+        if self.center_crop is not None:
+            crop_size = (
+                min(metadata["recon_size"][0], self.center_crop[0]),
+                min(metadata["recon_size"][1], self.center_crop[1]),
+            )
+        else:
+            crop_size = (
+                metadata["recon_size"][0],
+                metadata["recon_size"][1],
+            )
+
+        if target is not None:
+            target = T.to_tensor(target)
+            max_value = metadata["max"]
+            if self.center_crop is not None:
+                target = T.center_crop(
+                    M.rss(M.complex_abs(M.ifft2c(kspace)), dim=0), crop_size
+                )
+        else:
+            target = torch.tensor(0)
+            max_value = 0.0
 
         # Handle training and validation data.
         if mask is None:
