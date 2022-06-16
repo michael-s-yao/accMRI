@@ -16,7 +16,7 @@ from typing import Optional, Sequence, Tuple
 from data.dataset import DiscriminatorSample
 
 sys.path.append("..")
-from common.utils.math import fft2c, ifft2c
+from helper.utils.math import fft2c, ifft2c
 
 
 class DiscriminatorDataTransform:

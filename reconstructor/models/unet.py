@@ -118,9 +118,7 @@ class UNet(nn.Module):
             if sum(padding) != 0:
                 output = F.pad(output, padding, "reflect")
 
-            # Note: Changed the order of downsample_layer and output relative
-            # to fastMRI implementation.
-            output = torch.cat([downsample_layer, output], dim=1)
+            output = torch.cat([output, downsample_layer], dim=1)
             output = conv(output)
 
         return output

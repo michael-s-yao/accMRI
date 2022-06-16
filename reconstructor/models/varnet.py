@@ -17,10 +17,10 @@ from typing import Optional
 from models.unet import NormUNet
 
 sys.path.append("..")
-from common.utils.math import (
+from helper.utils.math import (
     complex_mul, fft2c, ifft2c, complex_conj, rss, complex_abs
 )
-import common.utils.transforms as T
+import helper.utils.transforms as T
 
 
 class VarNet(nn.Module):
@@ -165,8 +165,8 @@ class VarNetBlock(nn.Module):
             zeros
         )
         if self.is_multicoil:
-            model_term = VarNet.sens_expand(
-                self.model(VarNet.sens_reduce(pred_kspace, sens_maps)),
+            model_term = VarNetBlock.sens_expand(
+                self.model(VarNetBlock.sens_reduce(pred_kspace, sens_maps)),
                 sens_maps
             )
         else:

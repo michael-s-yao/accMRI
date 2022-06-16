@@ -50,8 +50,8 @@ class SSIMLoss(nn.Module):
             1 - SSIM(X, Y).
         """
         ssims = []
-        # Iterate over the batch.
         for i, (x, y,) in enumerate(zip(X, Y)):
+            x, y = torch.unsqueeze(x, dim=0), torch.unsqueeze(y, dim=0)
             ux = F.conv2d(x, self.w)  # E(X).
             uy = F.conv2d(y, self.w)  # E(Y).
             uxx = F.conv2d(x * x, self.w)  # E(X ** 2).
@@ -61,7 +61,8 @@ class SSIMLoss(nn.Module):
             vy = self.cov_norm * (uyy - (uy * uy))  # Var(Y).
             vxy = self.cov_norm * (uxy - (ux * uy))  # CoVar(X, Y).
 
-            L = data_range[i]  # Dynamic range of pixel values.
+            # Dynamic range of pixel values.
+            L = data_range[i, None, None, None]
             C1 = (self.k1 * L) ** 2  # (k1 * L) ** 2.
             C2 = (self.k2 * L) ** 2  # (k1 * L) ** 2.
             N1, N2, D1, D2 = (
@@ -108,6 +109,8 @@ def structural_similarity(
     # Normalization factor when calculating variance or covariance below.
     cov_norm = (win_size ** 2) / ((win_size ** 2) - 1)
 
+    X = torch.unsqueeze(X, dim=0)
+    Y = torch.unsqueeze(Y, dim=0)
     ux = F.conv2d(X, w)  # E(X).
     uy = F.conv2d(Y, w)  # E(Y).
     uxx = F.conv2d(X * X, w)  # E(X ** 2).

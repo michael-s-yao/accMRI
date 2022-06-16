@@ -21,8 +21,8 @@ from models.policy import DDQNPolicy
 from models.loss import DDQNLoss
 
 sys.path.append("..")
-from common.utils.evaluate import mse, ssim, save_reconstructions
-import common.utils.transforms as T
+from helper.utils.evaluate import mse, ssim, save_reconstructions
+import helper.utils.transforms as T
 
 
 class SamplerModule(pl.LightningModule):

@@ -19,8 +19,8 @@ from torch.utils.data import Dataset
 from typing import Callable, Dict, NamedTuple, Optional, Sequence, Tuple, Union
 
 sys.path.append("..")
-from common.utils.math import complex_abs, ifft2c
-import common.utils.transforms as T
+from helper.utils.math import complex_abs, ifft2c
+import helper.utils.transforms as T
 
 
 class ReconstructorSample(NamedTuple):
@@ -62,8 +62,9 @@ class ReconstructorDataset(Dataset):
 
         if os.path.isdir(data_path):
             data = os.listdir(data_path)
-            fns = [f for f in data if os.path.isfile(os.path.join(data_path, f))]
-            fns = fns[:8] # Debugging
+            fns = [
+                f for f in data if os.path.isfile(os.path.join(data_path, f))
+            ]
         elif os.path.isfile(data_path):
             fns = [data_path]
         else:

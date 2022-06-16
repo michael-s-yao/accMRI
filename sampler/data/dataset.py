@@ -19,8 +19,8 @@ from torch.utils.data import Dataset
 from typing import Callable, Dict, NamedTuple, Optional, Sequence, Tuple, Union
 
 sys.path.append("..")
-from common.utils.math import complex_abs, ifft2c
-import common.utils.transforms as T
+from helper.utils.math import complex_abs, ifft2c
+import helper.utils.transforms as T
 
 
 class PolicySample(NamedTuple):
@@ -82,7 +82,7 @@ class Policy(Dataset):
         """
         return len(self.data)
 
-    def __getitem__(self, idx: int) -> ReconstructorSample:
+    def __getitem__(self, idx: int) -> PolicySample:
         """
         Loads and returns a sample from the dataset at the given index.
         Required for torch.utils.data.Dataset subclass implementation.

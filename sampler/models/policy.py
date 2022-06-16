@@ -18,8 +18,8 @@ from models.buffer import ReplayBuffer
 from models.value import MLP
 
 sys.path.append("..")
-import common.utils.math as M
-import common.utils.transforms as T
+import helper.utils.math as M
+import helper.utils.transforms as T
 from reconstructor.models.varnet import VarNet as V
 from reconstructor.models.reconstructor import Reconstructor
 

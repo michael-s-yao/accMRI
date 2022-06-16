@@ -12,14 +12,14 @@ import numpy as np
 import sys
 import torch
 import pytorch_lightning as pl
-from typing import Optional, Union
+from typing import Optional
 from torchmetrics.metric import Metric
 from models.reconstructor import Reconstructor
 from models.loss import SSIMLoss
 
 sys.path.append("..")
-from common.utils.evaluate import mse, ssim, save_reconstructions
-import common.utils.transforms as T
+from helper.utils.evaluate import mse, ssim, save_reconstructions
+import helper.utils.transforms as T
 
 
 class ReconstructorModule(pl.LightningModule):
@@ -27,8 +27,8 @@ class ReconstructorModule(pl.LightningModule):
 
     def __init__(
         self,
-        kspace_size: Union[torch.Size, tuple] = (1, 15, 640, 372, 2,),
         model: str = "varnet",
+        is_multicoil: bool = False,
         chans: int = 18,
         pools: int = 4,
         cascades: int = 12,
@@ -39,12 +39,13 @@ class ReconstructorModule(pl.LightningModule):
         lr_step_size: int = 40,
         lr_gamma: float = 0.1,
         weight_decay: float = 0.0,
-        num_log_images: int = 16
+        num_log_images: int = 16,
+        save_reconstructions: bool = False,
     ):
         """
         Args:
-            kspace_size: dimensions of input kspace data.
             model: reconstructor model. One of ["varnet", "unet"].
+            is_multicoil: whether we are using multicoil data or not.
             chans: number of channels for regularization NormUNet.
             pools: number of down- and up- sampling layers for
                 regularization NormUNet.
@@ -58,11 +59,15 @@ class ReconstructorModule(pl.LightningModule):
             lr_gamma: learning rate gamma decay.
             weight_decay: parameter for penalizing weights norm.
             num_log_images: number of images to log.
+            save_reconstructions: whether to save the image reconstructions
+                from the test dataset.
         """
         super().__init__()
         self.save_hyperparameters()
 
-        self.kspace_size = kspace_size
+        self.azure_dataset_id = "knee"
+        self.local_dataset = "/home/t-michaelyao/accMRI/common/data/knee"
+
         self.chans = chans
         self.pools = pools
         self.cascades = cascades
@@ -75,6 +80,7 @@ class ReconstructorModule(pl.LightningModule):
         self.weight_decay = weight_decay
         self.num_log_images = num_log_images
         self.val_log_indices = None
+        self.save_reconstructions = save_reconstructions
 
         self.NMSE = DistributedMetricSum()
         self.SSIM = DistributedMetricSum()
@@ -84,8 +90,8 @@ class ReconstructorModule(pl.LightningModule):
         self.TotSliceExamples = DistributedMetricSum()
 
         self.reconstructor = Reconstructor(
+            is_multicoil=is_multicoil,
             model=model,
-            kspace_size=self.kspace_size,
             num_cascades=self.cascades,
             sens_chans=self.sens_chans,
             sens_pools=self.sens_pools,
@@ -113,12 +119,11 @@ class ReconstructorModule(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         output = self(batch.masked_kspace, batch.mask, batch.center_mask)
 
-        target, output = T.center_crop_to_smallest(batch.target, output)
-        output = T.scale_max_value(output, batch.max_value)
-
         loss = self.loss(
-            output.unsqueeze(1),
-            target.unsqueeze(1),
+            torch.unsqueeze(T.center_crop(output, batch.crop_size), dim=1),
+            torch.unsqueeze(
+                T.center_crop(batch.target, batch.crop_size), dim=1
+            ),
             data_range=batch.max_value
         )
 
@@ -129,21 +134,17 @@ class ReconstructorModule(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         output = self(batch.masked_kspace, batch.mask, batch.center_mask)
 
-        target, output = T.center_crop_to_smallest(batch.target, output)
-        output = T.scale_max_value(output, batch.max_value)
-
+        output = T.center_crop(output, batch.crop_size)
+        target = T.center_crop(batch.target, batch.crop_size)
         val_loss = self.loss(
-            output.unsqueeze(1),
-            target.unsqueeze(1),
+            torch.unsqueeze(output, dim=1),
+            torch.unsqueeze(target, dim=1),
             data_range=batch.max_value
         )
-        print(
-            "LOGGING",
-            self.global_step,
-            list(torch.where(batch.mask > 0.0)[-1].detach().cpu().numpy()),
-            list(torch.where(batch.center_mask > 0.0)[-1].detach().cpu().numpy()),
-            batch.masked_kspace.size()[-2],
-            1 - val_loss,
+
+        self.log("mask", batch.mask, batch_size=batch.masked_kspace.size()[0])
+        self.log(
+            "ssim", 1 - val_loss, batch_size=batch.masked_kspace.size()[0]
         )
 
         return {
@@ -216,8 +217,8 @@ class ReconstructorModule(pl.LightningModule):
             # Compute and save SSIM.
             ssim_vals[fname][slice_num] = torch.Tensor(
                 ssim(
-                    target.unsqueeze(0),
-                    output.unsqueeze(0),
+                    torch.unsqueeze(target, dim=0),
+                    torch.unsqueeze(output, dim=0),
                     max_val=max_val
                 )
             ).view(1)
@@ -243,7 +244,7 @@ class ReconstructorModule(pl.LightningModule):
         output = self(batch.masked_kspace, batch.mask)
 
         # Check for FLAIR 203 (always assuming square image reconstructions).
-        if self.kspace_size[0] > 1:
+        if batch.masked_kspace.size()[0] > 1:
             min_crop_size = batch.crop_size[0]
             for crop_size in batch.crop_size:
                 if crop_size[-1] < min_crop_size[-1]:
@@ -300,7 +301,7 @@ class ReconstructorModule(pl.LightningModule):
         return {
             "fname": batch.fn,
             "slice_num": batch.slice_idx,
-            "output": output.cpu().detach().numpy() * 255.0,
+            "output": output.cpu().detach().numpy(),
             "ssim": ssim
         }
 
@@ -369,6 +370,8 @@ class ReconstructorModule(pl.LightningModule):
             self.log(f"val_metrics/{metric}", value / tot_examples)
 
     def test_epoch_end(self, test_logs):
+        if not self.save_reconstructions:
+            return
         outputs = defaultdict(dict)
 
         for log in test_logs:

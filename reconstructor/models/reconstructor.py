@@ -9,13 +9,13 @@ Licensed under the MIT License.
 import sys
 import torch
 from torch import nn
-from typing import Optional, Union
+from typing import Optional
 from models.unet import UNet
 from models.varnet import VarNet
 from models.sens import SensitivityModel
 
 sys.path.append("..")
-from common.utils.math import (
+from helper.utils.math import (
     complex_mul, ifft2c, complex_conj, rss, complex_abs
 )
 
@@ -25,7 +25,7 @@ class Reconstructor(nn.Module):
 
     def __init__(
         self,
-        kspace_size: Union[torch.Size, tuple],
+        is_multicoil: bool = False,
         model: str = "varnet",
         sens_chans: int = 8,
         sens_pools: int = 4,
@@ -35,7 +35,7 @@ class Reconstructor(nn.Module):
     ):
         """
         Args:
-            kspace_size: size of input kspace data of shape BCHW2.
+            is_multicoil: whether we are using multicoil data or not.
             model: reconstructor model. One of [`varnet`, `unet`].
             sens_chans: number of channels for sensitivity map UNet.
             sens_pools: number of down- and up- sampling layers for sensitivity
@@ -46,9 +46,7 @@ class Reconstructor(nn.Module):
         """
         super().__init__()
 
-        self.kspace_size = kspace_size
-        b, c, h, w, d = kspace_size
-        self.is_multicoil = c > 1
+        self.is_multicoil = is_multicoil
 
         if model.lower() == "varnet":
             self.model = VarNet(is_multicoil=self.is_multicoil, **kwargs)

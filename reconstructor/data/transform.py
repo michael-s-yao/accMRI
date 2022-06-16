@@ -15,8 +15,7 @@ from typing import Optional, Sequence, Tuple, Union
 from data.dataset import ReconstructorSample
 
 sys.path.append("..")
-import common.utils.math as M
-import common.utils.transforms as T
+import helper.utils.transforms as T
 
 
 class ReconstructorDataTransform:
@@ -29,7 +28,8 @@ class ReconstructorDataTransform:
         self,
         center_fractions: Optional[Sequence[float]] = [0.08, 0.04, 0.00],
         center_crop: Optional[Union[torch.Size, tuple]] = None,
-        min_lines_acquired: Optional[int] = 0,
+        fixed_acceleration: Optional[int] = None,
+        min_lines_acquired: Optional[int] = 16,
         seed: Optional[int] = None,
     ):
         """
@@ -37,13 +37,17 @@ class ReconstructorDataTransform:
             center_fractions: fraction of low-frequency columns to be retained.
                 If multiple values are provided, then one of these numbers is
                 chosen uniformly each time.
-            center_crop: an optional tuple of shape HW to crop the input kspace
-                size to.
+            center_crop: an optional tuple of shape HW to crop the final
+                reconstruction to.
+            fixed_acceleration: optional fixed acceleration factor. Default to
+                variable acceleration factor (ie a random number of kspace
+                between min_lines_acquired and W).
             min_lines_acquired: minimum number of total lines acquired.
             seed: optional random seed.
         """
         self.center_fractions = center_fractions
         self.center_crop = center_crop
+        self.fixed_acceleration = fixed_acceleration
         self.min_lines_acquired = min_lines_acquired
         self.rng = np.random.RandomState(seed)
 
@@ -72,29 +76,17 @@ class ReconstructorDataTransform:
         # Add a coil dimension to singlecoil data.
         if kspace.ndim < 4:
             kspace = torch.unsqueeze(kspace, dim=0)
-        if self.center_crop is not None:
-            kspace = T.center_crop(
-                kspace.permute(0, -1, 1, 2), self.center_crop
-            ).permute(0, 2, 3, 1)
 
+        crop_size = (metadata["recon_size"][0], metadata["recon_size"][1])
         if self.center_crop is not None:
             crop_size = (
-                min(metadata["recon_size"][0], self.center_crop[0]),
-                min(metadata["recon_size"][1], self.center_crop[1]),
-            )
-        else:
-            crop_size = (
-                metadata["recon_size"][0],
-                metadata["recon_size"][1],
+                min(crop_size[0], self.center_crop[0]),
+                min(crop_size[1], self.center_crop[1]),
             )
 
         if target is not None:
             target = T.to_tensor(target)
             max_value = metadata["max"]
-            if self.center_crop is not None:
-                target = T.center_crop(
-                    M.rss(M.complex_abs(M.ifft2c(kspace)), dim=0), crop_size
-                )
         else:
             target = torch.tensor(0)
             max_value = 0.0
@@ -197,6 +189,12 @@ class ReconstructorDataTransform:
             max(self.min_lines_acquired - torch.sum(center_mask), 0),
             width - torch.sum(center_mask),
         )
+        if self.fixed_acceleration is not None or self.fixed_acceleration < 1:
+            num_high_freqs = int(torch.div(
+                width - torch.sum(center_mask),
+                self.fixed_acceleration,
+                rounding_mode="floor"
+            ).item())
         idxs = self.rng.choice(
             torch.squeeze(
                 torch.nonzero(center_mask < 1.0, as_tuple=False), dim=-1

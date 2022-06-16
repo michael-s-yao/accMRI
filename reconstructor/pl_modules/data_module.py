@@ -8,6 +8,7 @@ Licensed under the MIT License.
 """
 import os
 from torch.utils.data import DataLoader
+from pathlib import Path
 import pytorch_lightning as pl
 import sys
 import torch
@@ -16,7 +17,7 @@ from data.dataset import ReconstructorDataset, ReconstructorSample
 from data.transform import ReconstructorDataTransform
 
 sys.path.append("..")
-import common.utils.transforms as T
+import helper.utils.transforms as T
 
 
 class DataModule(pl.LightningDataModule):
@@ -24,38 +25,44 @@ class DataModule(pl.LightningDataModule):
 
     def __init__(
         self,
-        data_path: str,
+        data_path: Union[Path, str],
         train_dir: str = "multicoil_train",
         val_dir: str = "multicoil_val",
         test_dir: str = "multicoil_test",
         batch_size: int = 1,
         center_crop: Union[torch.Size, tuple] = (640, 368,),
+        fixed_acceleration: Optional[int] = None,
         num_workers: int = 4,
         seed: Optional[int] = None,
         fast_dev_run: bool = False,
     ):
         """
         Args:
-            data_path: a string path to the mutlicoil dataset.
+            data_path: a string path to the reconstruction dataset.
             train_dir: a string path to the training subdirectory.
             val_dir: a string path to the validation subdirectory.
             test_dir: a string path to the test set subdirectory.
             batch_size: batch size.
             center_crop: an optional tuple of shape HW to crop the input kspace
                 size to.
+            fixed_acceleration: optional fixed acceleration factor. Default to
+                variable acceleration factor (ie a random number of kspace
+                between min_lines_acquired and W).
             num_workers: number of workers for PyTorch dataloaders.
             seed: optional random seed for determining order of dataset.
             fast_dev_run: whether we are running a test fast_dev_run.
         """
         super().__init__()
 
-        self.data_path = data_path
+        self.data_path = str(data_path)
+        self.root_path = Path(self.data_path)
         self.batch_size = batch_size
         self.num_workers = num_workers
 
         # If all of train_dir, val_dir, and test_dir are None, then we are
         # predicting reconstructions.
         if train_dir is None and val_dir is None and test_dir is None:
+            multicoil = "multicoil" in data_path.lower()
             self.predict = ReconstructorDataset(
                 self.data_path,
                 ReconstructorDataTransform(
@@ -73,6 +80,8 @@ class DataModule(pl.LightningDataModule):
             ReconstructorDataTransform(
                 center_fractions=[0.08, 0.04],
                 center_crop=center_crop,
+                fixed_acceleration=fixed_acceleration,
+                min_lines_acquired=16,
                 seed=seed
             ),
             seed=seed,
@@ -84,6 +93,8 @@ class DataModule(pl.LightningDataModule):
             ReconstructorDataTransform(
                 center_fractions=[0.08, 0.04],
                 center_crop=center_crop,
+                fixed_acceleration=fixed_acceleration,
+                min_lines_acquired=16,
                 seed=seed,
             ),
             seed=seed,

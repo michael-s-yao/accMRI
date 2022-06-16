@@ -15,7 +15,7 @@ import pytorch_lightning as pl
 from models.discriminator import Discriminator
 
 sys.path.append("..")
-import common.utils.transforms as T
+import helper.utils.transforms as T
 
 
 class DiscriminatorModule(pl.LightningModule):

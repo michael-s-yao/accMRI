@@ -16,7 +16,7 @@ from data.dataset import DiscriminatorDataset, DiscriminatorSample
 from data.transform import DiscriminatorDataTransform
 
 sys.path.append("..")
-import common.utils.transforms as T
+import helper.utils.transforms as T
 
 
 class DataModule(pl.LightningDataModule):

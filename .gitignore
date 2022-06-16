@@ -7,7 +7,7 @@ __pycache__/
 *.DS_Store
 
 # fastMRI data
-common/data/knee
+helper/data/
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -19,6 +19,11 @@ env/
 reconstructor/reconstructions_v*/
 reconstructor/reconstructions/
 
+# Helpers
+reconstructor/helper/
+discriminator/helper/
+sampler/helper/
+
 # Powerpoint figures 
 *.pptx
 *.ppt
@@ -29,8 +34,13 @@ reconstructor/reconstructions/
 # Log files
 *.log
 lightning_logs/
+discriminator/log/
 
 # Amulet
 .amltconfig
 .amltignore
 *.yaml
+
+# InnerEye
+InnerEye/
+InnerEye-DeepLearning/

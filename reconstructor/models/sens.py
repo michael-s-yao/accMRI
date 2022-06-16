@@ -22,8 +22,8 @@ from typing import Optional, Tuple
 from models.unet import NormUNet
 
 sys.path.append("..")
-from common.utils.math import rss_complex, ifft2c
-import common.utils.transforms as T
+from helper.utils.math import rss_complex, ifft2c
+import helper.utils.transforms as T
 
 
 class SensitivityModel(nn.Module):
@@ -123,7 +123,11 @@ class SensitivityModel(nn.Module):
                 m[j] = 1.0
             center_masks.append(m)
 
-        return torch.from_numpy(np.array(center_masks)).type(torch.int32)
+        mask = torch.from_numpy(np.array(center_masks)).type(torch.int32)
+        if torch.cuda.is_available():
+            return mask.cuda()
+        else:
+            return mask
 
     def forward(
         self,

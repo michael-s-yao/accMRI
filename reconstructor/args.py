@@ -15,9 +15,10 @@ class Main:
         parser = argparse.ArgumentParser()
 
         parser.add_argument(
-            "data_path",
+            "--data_path",
             type=str,
-            help="A folder containing train, val, and test data subdirectories."
+            default="",
+            help="Data path. Defaults to the configured Amulet data directory."
         )
         parser.add_argument(
             "--model",
@@ -26,15 +27,20 @@ class Main:
             choices=("varnet", "unet"),
             help="Reconstructor model. Default VarNet."
         )
-        # Per Yin T, Wu Z, et al, we can optionally choose to crop kspace data to
-        # a smaller size, like (128, 128,), to speed up the pipeline. Otherwise,
-        # keep it at (640, 368,).
+        # Per Yin T, Wu Z, et al, we can optionally choose to crop our
+        # reconstruction to a smaller size, like (128, 128,) for instance.
         parser.add_argument(
             "--center_crop",
             type=int,
-            default=[640, 368],
+            default=[320, 320],
             nargs=2,
-            help="kspace crop size. Default (640, 368)."
+            help="kspace crop size. Default (320, 320) (fastMRI default)."
+        )
+        parser.add_argument(
+            "--fixed_acceleration",
+            type=int,
+            default=None,
+            help="Optional fixed acceleration factor for training."
         )
         parser.add_argument(
             "--multicoil",
@@ -62,8 +68,8 @@ class Main:
         parser.add_argument(
             "--lr",
             type=float,
-            default=0.0003,
-            help="Learning rate. Default 0.0003."
+            default=0.001,
+            help="Learning rate. Default 0.001."
         )
         parser.add_argument(
             "--lr_step_size",
@@ -81,7 +87,7 @@ class Main:
             "--weight_decay",
             type=float,
             default=0.0,
-            help="Weight decay. Default 0.1."
+            help="Weight decay. Default 0.0."
         )
         parser.add_argument(
             "--max_epochs",
@@ -109,8 +115,8 @@ class Main:
         parser.add_argument(
             "--cascades",
             type=int,
-            default=12,
-            help="Number of VarNet cascades. Default 12."
+            default=8,
+            help="Number of VarNet cascades. Default 8."
         )
         parser.add_argument(
             "--sens_chans",
@@ -122,7 +128,7 @@ class Main:
             "--sens_pools",
             type=int,
             default=4,
-            help="Number of pooling layers for sensitivity map UNet. Default 4."
+            help="Number of pool layers for sensitivity map UNet. Default 4."
         )
         parser.add_argument(
             "--sens_drop_prob",
@@ -135,13 +141,18 @@ class Main:
             type=str,
             default="both",
             choices=("train", "test", "both"),
-            help="Operation mode. One of ['train', 'test', 'both']. Default both."
+            help="One of ['train', 'test', 'both']. Default both."
         )
         parser.add_argument(
             "--num_log_images",
             type=int,
             default=16,
             help="Number of images to log. Default 16."
+        )
+        parser.add_argument(
+            "--save_reconstructions",
+            action="store_true",
+            help="Save image reconstructions from test dataset."
         )
 
         return parser.parse_args()
