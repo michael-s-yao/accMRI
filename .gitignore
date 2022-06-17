@@ -18,6 +18,7 @@ env/
 # Image reconstructions
 reconstructor/reconstructions_v*/
 reconstructor/reconstructions/
+reconstructor/predictions/
 
 # Helpers
 reconstructor/helper/

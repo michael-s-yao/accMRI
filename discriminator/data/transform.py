@@ -27,9 +27,9 @@ class DiscriminatorDataTransform:
 
     def __init__(
         self,
-        max_rotation: float = 15.0,
-        max_x: float = 0.1,
-        max_y: float = 0.1,
+        rotation: Sequence[float] = [5.0, 15.0],
+        dx: Sequence[float] = [0.05, 0.1],
+        dy: Sequence[float] = [0.05, 0.1],
         p_transform: float = 0.5,
         p_spike: float = 0.5,
         max_spikes: int = 10,
@@ -41,13 +41,14 @@ class DiscriminatorDataTransform:
     ):
         """
         Args:
-            max_rotation: maximum angle of rotation about the center of the
+            rotation: range of rotation magnitude about the center of the
                 image in degrees. The image will be rotated between
-                -max_rotation and max_rotation degrees. Defaults to 15 degrees.
-            max_x: maximum absolute fraction for horizontal image translation.
-                Defaults to 0.1.
-            max_y: maximum absolute fraction for vertical image translation.
-                Defaults to 0.1.
+                -theta and +theta degrees, where rotation[0] < abs(theta) <
+                rotation[-1]. Defaults to [5.0, 15.0] degrees.
+            dx: range of absolute fraction for horizontal image translation.
+                Defaults to [0.05, 0.1].
+            dy: range of absolute fraction for vertical image translation.
+                Defaults to [0.05, 0.1].
             p_transform: probability of applying the affine transform or any
                 of the kspace dirtying operations. Defaults to 0.5.
             p_spike: probability of a kspace spike.
@@ -64,17 +65,21 @@ class DiscriminatorDataTransform:
         self.rng = np.random.RandomState(self.seed)
 
         torch.manual_seed(self.seed)
-        max_rotation = abs(max_rotation % 180)
-        max_x = max(min(max_x, 1.0), 0.0)
-        max_y = max(min(max_y, 1.0), 0.0)
-        self.transform = torchvision.transforms.RandomApply(
-            torch.nn.ModuleList([
-                torchvision.transforms.RandomAffine(
-                    degrees=max_rotation, translate=(max_x, max_y)
-                )
-            ]),
-            p=p_transform
+        self.rotation = sorted(
+            (abs(rotation[0] % 180), abs(rotation[-1] % 180))
         )
+        if self.rotation[0] == self.rotation[-1]:
+            self.rotation[0] = -1.0 * self.rotation[0]
+        self.dx = sorted(
+            (max(min(dx[0], 1.0), 0.0), max(min(dx[-1], 1.0), 0.0))
+        )
+        if self.dx[0] == self.dx[-1]:
+            self.dx[0] = -1.0 * self.dx[0]
+        self.dy = sorted(
+            (max(min(dy[0], 1.0), 0.0), max(min(dy[-1], 1.0), 0.0))
+        )
+        if self.dy[0] == self.dy[-1]:
+            self.dy[0] = -1.0 * self.dy[0]
         self.p = p_transform
         self.p_spike = p_spike
         self.max_spikes = max_spikes
@@ -114,8 +119,28 @@ class DiscriminatorDataTransform:
 
         cimg = ifft2c(kspace)
         # 2. Apply affine transform.
-        distorted_target = self.transform(torch.permute(cimg, (0, -1, 1, 2)))
-        distorted_target = torch.permute(distorted_target, (0, 2, 3, 1))
+        if self.rng.uniform() < self.p:
+            theta = self.rng.uniform(self.rotation[0], self.rotation[-1])
+            if self.rng.uniform() < 0.5:
+                theta = -1.0 * theta
+            deltax = self.rng.uniform(self.dx[0], self.dx[-1])
+            if self.rng.uniform() < 0.5:
+                deltax = -1.0 * deltax
+            deltay = self.rng.uniform(self.dy[0], self.dy[-1])
+            if self.rng.uniform() < 0.5:
+                deltay = -1.0 * deltay
+            distorted_target = torchvision.transforms.functional.affine(
+                torch.permute(cimg, (0, -1, 1, 2)),
+                angle=theta,
+                translate=[deltax, deltay],
+                scale=1.0,
+                shear=0.0
+            )
+            distorted_target = torch.permute(distorted_target, (0, 2, 3, 1))
+        else:
+            theta, deltax, deltay = 0.0, 0.0, 0.0
+            distorted_target = cimg.clone()
+
         distorted_kspace = fft2c(distorted_target)
 
         # 3. Apply kspace spiking.
@@ -165,6 +190,9 @@ class DiscriminatorDataTransform:
         return DiscriminatorSample(
             kspace,
             distorted_kspace,
+            theta,
+            deltax,
+            deltay,
             sampled_mask.type(torch.float32),
             acquiring_mask.type(torch.float32),
             metadata,

@@ -22,17 +22,24 @@ def build_args() -> argparse.Namespace:
         help="Explicitly specify whether to use multicoil data."
     )
     parser.add_argument(
-        "--max_rotation",
+        "--rotation",
         type=float,
-        default=15.0,
-        help="Maximum absolute angle of rotation (in degrees). Default 15 deg."
+        default=[10.0, 15.0],
+        help="Range of rotation magnitude (in degrees). Default 10 to 15 deg."
     )
     parser.add_argument(
-        "--max_translation",
+        "--x_range",
         type=float,
-        default=[0.1, 0.1],
+        default=[0.05, 0.1],
         nargs=2,
-        help="Max absolute fraction for image translation. Default (0.1, 0.1)."
+        help="Range of horizontal translation magnitude. Default (0.05, 0.1)."
+    )
+    parser.add_argument(
+        "--y_range",
+        type=float,
+        default=[0.05, 0.1],
+        nargs=2,
+        help="Range of vertical translation magnitude. Default (0.05, 0.1)."
     )
     parser.add_argument(
         "--p_transform",
@@ -67,14 +74,14 @@ def build_args() -> argparse.Namespace:
     parser.add_argument(
         "--min_lines_acquired",
         type=int,
-        default=8,
-        help="Minimum number of lines previously acquired. Default 8."
+        default=16,
+        help="Minimum number of lines previously acquired. Default 16."
     )
     parser.add_argument(
         "--max_lines_acquiring",
         type=int,
-        default=12,
-        help="Maximum number of lines in a single acquisition. Default 12."
+        default=16,
+        help="Maximum number of lines in a single acquisition. Default 16."
     )
     parser.add_argument(
         "--seed",
@@ -94,8 +101,8 @@ def build_args() -> argparse.Namespace:
     parser.add_argument(
         "--lr",
         type=float,
-        default=0.0003,
-        help="Learning rate. Default 0.0003."
+        default=0.001,
+        help="Learning rate. Default 0.001."
     )
     parser.add_argument(
         "--lr_step_size",
@@ -113,7 +120,7 @@ def build_args() -> argparse.Namespace:
         "--weight_decay",
         type=float,
         default=0.0,
-        help="Weight decay. Default 0.1."
+        help="Weight decay. Default 0.0."
     )
     parser.add_argument(
         "--max_epochs",
@@ -144,6 +151,12 @@ def build_args() -> argparse.Namespace:
         default="both",
         choices=("both", "train", "test"),
         help="Operation mode. Default to both train and test the model."
+    )
+    parser.add_argument(
+        "--num_gpus",
+        type=int,
+        default=0,
+        help="Number of GPUs in use."
     )
 
     return parser.parse_args()

@@ -44,7 +44,8 @@ def main():
         center_crop=args.center_crop,
         fixed_acceleration=args.fixed_acceleration,
         seed=seed,
-        fast_dev_run=args.fast_dev_run
+        fast_dev_run=args.fast_dev_run,
+        num_gpus=args.num_gpus
     )
     model = ReconstructorModule(
         model=args.model,
@@ -67,7 +68,8 @@ def main():
     checkpoint_callback = ModelCheckpoint(
         every_n_epochs=5,
         filename=("reconstructor-" + start + "-{epoch}-{validation_loss}"),
-        monitor="validation_loss"
+        monitor="validation_loss",
+        save_last=True
     )
     # Will use GPUs automatically if available.
     trainer = pl.Trainer(
@@ -76,7 +78,9 @@ def main():
         log_every_n_steps=log_every_n_steps,
         callbacks=[checkpoint_callback],
         accelerator="auto",
-        devices="auto"
+        devices="auto",
+        strategy="ddp",
+        auto_select_gpus=True,
     )
     if args.mode.lower() in ("both", "train"):
         trainer.fit(model, datamodule=datamodule)

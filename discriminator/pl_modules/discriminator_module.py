@@ -8,10 +8,11 @@ Licensed under the MIT License.
 """
 import matplotlib.pyplot as plt
 import os
+import pytorch_lightning as pl
 import sys
 import torch
 import torch.nn as nn
-import pytorch_lightning as pl
+from torchmetrics.metric import Metric
 from models.discriminator import Discriminator
 
 sys.path.append("..")
@@ -60,6 +61,8 @@ class DiscriminatorModule(pl.LightningModule):
         )
 
         self.loss = nn.BCELoss()
+        self.ValLoss = DistributedMetricSum()
+        self.TotSliceExamples = DistributedMetricSum()
 
     def forward(
         self,
@@ -155,6 +158,22 @@ class DiscriminatorModule(pl.LightningModule):
             )
         }
 
+    def validation_epoch_end(self, val_logs):
+        # Aggregate metrics.
+        losses = []
+        count = 0
+        for val_log in val_logs:
+            count += 1
+            losses.append(val_log["val_loss"].view(-1))
+
+        val_loss = self.ValLoss(torch.sum(torch.cat(losses)))
+        tot_slice_examples = self.TotSliceExamples(
+            torch.tensor(len(losses), dtype=torch.float)
+        )
+        self.log(
+            "validation_loss", val_loss / tot_slice_examples, prog_bar=True
+        )
+
     def test_step(self, batch, batch_idx):
         acquired = T.apply_mask(batch.ref_kspace, batch.sampled_mask)
         acquiring = T.apply_mask(batch.distorted_kspace, batch.acquiring_mask)
@@ -173,7 +192,7 @@ class DiscriminatorModule(pl.LightningModule):
             "fname": batch.fn,
             "slice_num": batch.slice_idx,
             "heatmap": T.apply_mask(heatmap, batch.acquiring_mask),
-            "val_loss": self.loss(
+            "loss": self.loss(
                 heatmap[idxs[0], :, idxs[1]].T,
                 ground_truth[idxs[0], :, idxs[1]].T
             )
@@ -205,3 +224,18 @@ class DiscriminatorModule(pl.LightningModule):
             bbox_inches="tight",
             transparent=True
         )
+
+
+class DistributedMetricSum(Metric):
+    def __init__(self, dist_sync_on_step=True):
+        super().__init__(dist_sync_on_step=dist_sync_on_step)
+
+        self.add_state(
+            "quantity", default=torch.tensor(0.0), dist_reduce_fx="sum"
+        )
+
+    def update(self, batch: torch.Tensor):
+        self.quantity += batch
+
+    def compute(self):
+        return self.quantity

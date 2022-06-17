@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 import pytorch_lightning as pl
 import sys
 import torch
-from typing import Optional
+from typing import Optional, Sequence
 from data.dataset import DiscriminatorDataset, DiscriminatorSample
 from data.transform import DiscriminatorDataTransform
 
@@ -30,9 +30,9 @@ class DataModule(pl.LightningDataModule):
         test_dir: str = "singlecoil_test",
         batch_size: int = 1,
         num_workers: int = 4,
-        max_rotation: float = 15.0,
-        max_x: float = 0.1,
-        max_y: float = 0.1,
+        rotation: Sequence[float] = [10.0, 15.0],
+        dx: Sequence[float] = [0.05, 0.1],
+        dy: Sequence[float] = [0.05, 0.1],
         p_transform: float = 0.5,
         p_spike: float = 0.5,
         max_spikes: int = 10,
@@ -40,7 +40,9 @@ class DataModule(pl.LightningDataModule):
         max_rf_cont: int = 10,
         min_lines_acquired: int = 8,
         max_lines_acquiring: int = 12,
-        seed: Optional[int] = None
+        seed: Optional[int] = None,
+        fast_dev_run: bool = False,
+        num_gpus: int = 0
     ):
         """
         Args:
@@ -50,13 +52,14 @@ class DataModule(pl.LightningDataModule):
             test_dir: a string path to the test set subdirectory.
             batch_size: batch size.
             num_workers: number of workers for PyTorch dataloaders.
-            max_rotation: maximum angle of rotation about the center of the
+            rotation: range of rotation magnitude about the center of the
                 image in degrees. The image will be rotated between
-                -max_rotation and max_rotation degrees. Defaults to 15 degrees.
-            max_x: maximum absolute fraction for horizontal image translation.
-                Defaults to 0.1.
-            max_y: maximum absolute fraction for vertical image translation.
-                Defaults to 0.1.
+                -theta and +theta degrees, where rotation[0] < abs(theta) <
+                rotation[-1]. Defaults to [5.0, 15.0] degrees.
+            dx: range of absolute fraction for horizontal image translation.
+                Defaults to [0.05, 0.1].
+            dy: range of absolute fraction for vertical image translation.
+                Defaults to [0.05, 0.1].
             p_transform: probability of applying the affine transform or any
                 of the kspace dirtying operations. Defaults to 0.5.
             p_spike: probability of a kspace spike. Defaults to 0.5.
@@ -68,6 +71,8 @@ class DataModule(pl.LightningDataModule):
             max_lines_acquiring: maximum number of lines in a single
                 acquisition.
             seed: optional random seed.
+            fast_dev_run: whether we are running a test fast_dev_run.
+            num_gpus: number of GPUs in use.
         """
         super().__init__()
 
@@ -84,9 +89,9 @@ class DataModule(pl.LightningDataModule):
             datasets[key] = DiscriminatorDataset(
                 str(os.path.join(self.data_path, key)),
                 DiscriminatorDataTransform(
-                    max_rotation=max_rotation,
-                    max_x=max_x,
-                    max_y=max_y,
+                    rotation=rotation,
+                    dx=dx,
+                    dy=dy,
                     p_transform=p_transform,
                     p_spike=p_spike,
                     max_spikes=max_spikes,
@@ -96,7 +101,9 @@ class DataModule(pl.LightningDataModule):
                     max_lines_acquiring=max_lines_acquiring,
                     seed=seed,
                 ),
-                seed=seed
+                seed=seed,
+                fast_dev_run=fast_dev_run,
+                num_gpus=num_gpus
             )
         self.train = datasets[train_dir]
         self.val = datasets[val_dir]

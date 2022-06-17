@@ -189,7 +189,7 @@ class ReconstructorDataTransform:
             max(self.min_lines_acquired - torch.sum(center_mask), 0),
             width - torch.sum(center_mask),
         )
-        if self.fixed_acceleration is not None or self.fixed_acceleration < 1:
+        if self.fixed_acceleration is not None and self.fixed_acceleration < 1:
             num_high_freqs = int(torch.div(
                 width - torch.sum(center_mask),
                 self.fixed_acceleration,

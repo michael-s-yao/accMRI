@@ -35,7 +35,7 @@ class ReconstructorModule(pl.LightningModule):
         sens_chans: int = 8,
         sens_pools: int = 4,
         sens_drop_prob: float = 0.0,
-        lr: float = 0.0003,
+        lr: float = 0.001,
         lr_step_size: int = 40,
         lr_gamma: float = 0.1,
         weight_decay: float = 0.0,
@@ -269,40 +269,32 @@ class ReconstructorModule(pl.LightningModule):
     def predict_step(self, batch, batch_idx):
         output = self(batch.masked_kspace, batch.mask)
 
-        # Check for FLAIR 203 (always assuming square image reconstructions).
-        if self.kspace_size[0] > 1:
-            min_crop_size = batch.crop_size[0]
-            for crop_size in batch.crop_size:
-                if crop_size[-1] < min_crop_size[-1]:
-                    min_crop_size = crop_size
-            if output.size()[-1] < min_crop_size[-1]:
-                crop_size = (output.size()[-1], output.size()[-1])
-            else:
-                crop_size = min_crop_size
-        else:
-            if output.size()[-1] < batch.crop_size[-1]:
-                crop_size = (output.size()[-1], output.size()[-1])
-            else:
-                crop_size = batch.crop_size
-
-        output = T.center_crop(output, crop_size)
+        output = T.center_crop(output, batch.crop_size)
         if batch.target is not None and batch.target.ndim > 1:
             if batch.target.ndim < 3:
                 target = torch.unsqueeze(batch.target, dim=0)
             else:
                 target = batch.target
+            target = T.center_crop(target, batch.crop_size)
             if output.ndim < 3:
                 output = torch.unsqueeze(output, dim=0)
             ssim = 1 - self.loss(
                 output.unsqueeze(0), target.unsqueeze(0), batch.max_value
             )
         else:
+            target = None 
             ssim = -1
+        if target is not None:
+            target = target.detach().cpu().numpy()
+        
+        accfactor = batch.mask.size()[-1] / torch.sum(batch.mask, dim=1).item()
         return {
             "fname": batch.fn,
             "slice_num": batch.slice_idx,
-            "output": output.cpu().detach().numpy(),
-            "ssim": ssim
+            "output": output.detach().cpu().numpy(),
+            "target": target,
+            "ssim": ssim,
+            "acc_factor": accfactor,
         }
 
     def configure_optimizers(self):

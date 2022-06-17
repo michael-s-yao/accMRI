@@ -7,9 +7,10 @@ Author(s):
 Licensed under the MIT License.
 """
 from args import Inference
+import matplotlib.pyplot as plt
 import os
 from pytorch_lightning import Trainer
-import torch
+import sys
 from typing import List, Dict, Any
 import yaml
 
@@ -45,6 +46,7 @@ def load_models(lightning_logs: str) -> List[Dict[str, Any]]:
             hparams = yaml.safe_load(p)
 
         key = "[" + f.split("_")[-1] + "] "
+        key += "Multicoil " if hparams["is_multicoil"] else "Singlecoil "
         if hparams["model"] == "unet":
             key += "UNet "
         elif hparams["model"] == "varnet":
@@ -53,9 +55,8 @@ def load_models(lightning_logs: str) -> List[Dict[str, Any]]:
             raise ValueError(
                 f"Unrecognized reconstructor model {hparams['model']}."
             )
-        key += "trained on "
-        key += str((hparams["kspace_size"][-3], hparams["kspace_size"][-2]))
-        key += " kspace data"
+        key += "with " + str(hparams["center_crop"][0]) + " by "
+        key += str(hparams["center_crop"][-1]) + " final image size"
 
         min_val_loss = 1e12
         model = None
@@ -80,7 +81,7 @@ def load_models(lightning_logs: str) -> List[Dict[str, Any]]:
             "key": key,
             "model": os.path.join(lightning_logs, f, "checkpoints", model),
             "model_type": hparams["model"],
-            "kspace_size": tuple(hparams["kspace_size"])
+            "center_crop": tuple(hparams["center_crop"]),
         })
 
     return models
@@ -89,9 +90,16 @@ def load_models(lightning_logs: str) -> List[Dict[str, Any]]:
 def infer():
     args = Inference.build_args()
 
-    models = load_models(args.lightning_logs_path)
+    models = load_models(args.lightning_logs)
+    if len(models) == 0:
+        print("No models found in {args.lightning_logs} directory. Exiting...")
+        sys.exit(0)
+    elif len(models) == 1:
+        print("Only one model found. Using " + models[0]["key"])
     if 0 <= args.model_option < len(models):
         ckpt_path = models[args.model_option]["model"]
+        print("Using " + models[args.model_option]["key"])
+        model_option = args.model_option
     else:
         print("Choose the reconstructor model to use:")
         for option in models:
@@ -101,30 +109,67 @@ def infer():
         ckpt_path = models[model_option]["model"]
 
     data_module = DataModule(
-        args.data_path, train_dir=None, val_dir=None, test_dir=None
+        args.data_path,
+        train_dir=None,
+        val_dir=None,
+        test_dir=None,
+        center_crop=models[model_option]["center_crop"]
     )
     infer_model = ReconstructorModule.load_from_checkpoint(ckpt_path)
-    if torch.cuda.is_available():
-        trainer = Trainer(
-            accelerator="gpu",
-            devices=1,
-            enable_checkpointing=False,
-            logger=False,
-            max_epochs=1
-        )
-    else:
-        trainer = Trainer(
-            enable_checkpointing=False, logger=False, max_epochs=1
-        )
+    trainer = Trainer(
+        accelerator="auto",
+        devices="auto",
+        enable_checkpointing=False,
+        logger=False,
+        max_epochs=1
+    )
     predictions = trainer.predict(
         infer_model, dataloaders=data_module.predict_dataloader()
     )
 
-    import matplotlib.pyplot as plt
-    plt.figure()
-    plt.imshow(predictions[15]["output"][0], cmap="gray")
-    plt.savefig("test.png")
-    print(predictions[15]["ssim"])
+    if args.save_path is not None and len(args.save_path) > 0:
+        save_predictions(predictions, args.save_path)
+
+
+def save_predictions(predictions: List[dict], save_path: str):
+    """
+    """
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+    for prediction in predictions:
+        cols = 1 if prediction["target"] is None else 2
+        fig, ax = plt.subplots(1, cols)
+        if prediction["target"] is not None:
+            ax, axtarg = ax
+        ax.imshow(prediction["output"][0], cmap="gray")
+        ax.axis("off")
+        title = "Prediction: " if prediction["target"] is not None else ""
+        title += "Slice " + str(prediction["slice_num"].item())
+        ax.set_title(title)
+
+        if prediction["target"] is not None:
+            axtarg.imshow(prediction["target"][0], cmap="gray")
+            axtarg.axis("off")
+            axtarg.set_title(
+                "SSIM: " + format(prediction["ssim"].item(), ".3f")
+            )
+        
+        fig.suptitle(
+            "Acceleration Factor: " + format(prediction["acc_factor"], ".3f")
+        )
+
+        sub_path = os.path.join(
+            save_path, prediction["fname"][0].split(".")[0].split("/")[-1]
+        )
+        if not os.path.exists(sub_path):
+            os.makedirs(sub_path)
+        plt.savefig(
+            os.path.join(
+                sub_path, str(prediction["slice_num"].item()) + ".png"
+            ),
+            bbox_inches="tight"
+        )
+        plt.close()
 
 
 if __name__ == "__main__":

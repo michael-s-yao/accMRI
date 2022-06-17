@@ -46,15 +46,17 @@ class ReconstructorDataset(Dataset):
         seed: Optional[int] = None,
         fast_dev_run: bool = False,
         multicoil: bool = False,
+        num_gpus: int = 0
     ):
         """
         Args:
-            data_path: a string path to the multicoil dataset.
+            data_path: a string path to the input dataset (or data file).
             transform: an optional callable object that pre-processes the raw
                 data into the appropriate form.
             seed: optional random seed for determining order of dataset.
             fast_dev_run: whether we are running a test fast_dev_run.
             multicoil: whether we are using multicoil data or not.
+            num_gpus: number of GPUs used for training.
         """
         super().__init__()
         self.transform = transform
@@ -71,6 +73,8 @@ class ReconstructorDataset(Dataset):
             raise ValueError(f"{data_path} is not a valid data path.")
         self.data_path = data_path
         self.fns = fns
+        if self.fast_dev_run:
+            self.fns = self.fns[:16]
         self.data = []
         for fn in sorted(self.fns):
             if not fn.endswith(".h5"):
@@ -80,6 +84,10 @@ class ReconstructorDataset(Dataset):
                 self.data += [(fn, slice_idx, metadata)]
         self.rng = np.random.RandomState(seed)
         self.rng.shuffle(self.data)
+
+        if num_gpus > 1:
+            even_length = (len(self.data) // num_gpus) * num_gpus
+            self.data = self.data[:even_length]
 
         # Reconstruction target, per fastMRI dataset documentation.
         self.recons_key = "reconstruction_esc"

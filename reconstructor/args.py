@@ -38,7 +38,7 @@ class Main:
         )
         parser.add_argument(
             "--fixed_acceleration",
-            type=int,
+            type=float,
             default=None,
             help="Optional fixed acceleration factor for training."
         )
@@ -154,6 +154,12 @@ class Main:
             action="store_true",
             help="Save image reconstructions from test dataset."
         )
+        parser.add_argument(
+            "--num_gpus",
+            type=int,
+            default=0,
+            help="Number of GPUs in use."
+        )
 
         return parser.parse_args()
 
@@ -169,7 +175,7 @@ class Inference:
             help="A file or folder of undersampled kspace data."
         )
         parser.add_argument(
-            "--lightning_logs_path",
+            "--lightning_logs",
             type=str,
             default="./lightning_logs",
             help="A path to the reconstructor lightning logs."
@@ -179,6 +185,12 @@ class Inference:
             type=int,
             default="-1",
             help="Reconstructor option choice (avoids interactive input)."
+        )
+        parser.add_argument(
+            "--save_path",
+            type=str,
+            default="./predictions",
+            help="Save path for image reconstructions from input dataset."
         )
 
         return parser.parse_args()

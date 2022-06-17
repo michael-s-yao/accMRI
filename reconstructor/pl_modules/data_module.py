@@ -31,10 +31,11 @@ class DataModule(pl.LightningDataModule):
         test_dir: str = "multicoil_test",
         batch_size: int = 1,
         center_crop: Union[torch.Size, tuple] = (640, 368,),
-        fixed_acceleration: Optional[int] = None,
+        fixed_acceleration: Optional[float] = None,
         num_workers: int = 4,
         seed: Optional[int] = None,
         fast_dev_run: bool = False,
+        num_gpus: int = 0,
     ):
         """
         Args:
@@ -47,10 +48,11 @@ class DataModule(pl.LightningDataModule):
                 size to.
             fixed_acceleration: optional fixed acceleration factor. Default to
                 variable acceleration factor (ie a random number of kspace
-                between min_lines_acquired and W).
+                between min_lines_acquired and W will be acquired).
             num_workers: number of workers for PyTorch dataloaders.
             seed: optional random seed for determining order of dataset.
             fast_dev_run: whether we are running a test fast_dev_run.
+            num_gpus: number of GPUs in use.
         """
         super().__init__()
 
@@ -86,7 +88,8 @@ class DataModule(pl.LightningDataModule):
             ),
             seed=seed,
             fast_dev_run=fast_dev_run,
-            multicoil=multicoil
+            multicoil=multicoil,
+            num_gpus=num_gpus
         )
         self.val = ReconstructorDataset(
             str(os.path.join(self.data_path, val_dir)),
@@ -99,7 +102,8 @@ class DataModule(pl.LightningDataModule):
             ),
             seed=seed,
             fast_dev_run=fast_dev_run,
-            multicoil=multicoil
+            multicoil=multicoil,
+            num_gpus=num_gpus
         )
         self.test = ReconstructorDataset(
             str(os.path.join(self.data_path, test_dir)),
@@ -109,7 +113,8 @@ class DataModule(pl.LightningDataModule):
             ),
             seed=seed,
             fast_dev_run=fast_dev_run,
-            multicoil=multicoil
+            multicoil=multicoil,
+            num_gpus=num_gpus
         )
         self.predict = None
 
@@ -119,13 +124,17 @@ class DataModule(pl.LightningDataModule):
             self.train,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
+            pin_memory=torch.cuda.is_available(),
             shuffle=True
         )
 
     def val_dataloader(self):
         """Returns the validation dataloader."""
         return DataLoader(
-            self.val, batch_size=self.batch_size, num_workers=self.num_workers
+            self.val,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            pin_memory=torch.cuda.is_available()
         )
 
     def test_dataloader(self):
@@ -135,7 +144,8 @@ class DataModule(pl.LightningDataModule):
             self.test,
             batch_size=self.batch_size,
             collate_fn=test_collate_fn,
-            num_workers=self.num_workers
+            num_workers=self.num_workers,
+            pin_memory=torch.cuda.is_available()
         )
 
     def predict_dataloader(self):
