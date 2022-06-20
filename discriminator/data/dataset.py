@@ -12,6 +12,7 @@ import h5py
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+import pickle
 import sys
 import time
 import torch
@@ -49,7 +50,8 @@ class DiscriminatorDataset(Dataset):
         transform: Callable,
         seed: Optional[int] = None,
         fast_dev_run: bool = False,
-        num_gpus: int = 0
+        num_gpus: int = 0,
+        dataset_cache_file: Optional[str] = None
     ):
         """
         Args:
@@ -58,32 +60,68 @@ class DiscriminatorDataset(Dataset):
             seed: optional random seed for determining order of dataset.
             fast_dev_run: whether we are running a test fast_dev_run.
             num_gpus: number of GPUs used for training.
+            dataset_cache_file: optional dataset cache file to use for faster
+                load times.
         """
         super().__init__()
         self.transform = transform
         self.fast_dev_run = fast_dev_run
-
-        if os.path.isdir(data_path):
-            data = os.listdir(data_path)
-            fns = [
-                f for f in data if os.path.isfile(os.path.join(data_path, f))
-            ]
-        elif os.path.isfile(data_path):
-            fns = [data_path]
-        else:
-            raise ValueError(f"{data_path} is not a valid data path.")
-        self.data_path = data_path
-        self.fns = fns
-        if self.fast_dev_run:
-            self.fns = self.fns[:16]
-        self.data = []
-        for fn in sorted(self.fns):
-            if not fn.endswith(".h5"):
-                continue
-            metadata, num_slices = self.slice_metadata(fn)
-            for slice_idx in range(num_slices):
-                self.data += [(fn, slice_idx, metadata)]
         self.rng = np.random.RandomState(seed)
+        self.data_path = data_path
+        self.dataset_cache_file = dataset_cache_file
+        if self.dataset_cache_file is None:
+            cache_path = os.environ.get("AMLT_OUTPUT_DIR", "./")
+            if "multicoil" in data_path.lower():
+                cache_path += "multicoil_"
+            elif "singlecoil" in data_path.lower():
+                cache_path += "singlecoil_"
+            else:
+                cache_path += "coil_"
+            if "knee" in data_path.lower():
+                cache_path += "knee_"
+            elif "brain" in data_path.lower():
+                cache_path += "brain_"
+            else:
+                cache_path += "anatomy_"
+            cache_path += "cache.pkl"
+            self.dataset_cache_file = cache_path
+
+        if os.path.isfile(self.dataset_cache_file):
+            with open(self.dataset_cache_file, "rb") as f:
+                cache = pickle.load(f)
+        else:
+            cache = {}
+        self.data = cache.get(self.data_path, [])
+        self.fns = None
+        if len(self.data) > 0:
+            print(f"Using data cache file {self.dataset_cache_file}.")
+        else:
+            if os.path.isdir(self.data_path):
+                data = os.listdir(self.data_path)
+                fns = []
+                for f in data:
+                    if os.path.isfile(os.path.join(self.data_path, f)):
+                        fns.append(f)
+            elif os.path.isfile(self.data_path):
+                fns = [self.data_path]
+            else:
+                raise ValueError(f"{self.data_path} is not a valid data path.")
+            self.fns = fns
+            if self.fast_dev_run:
+                self.fns = self.fns[:16]
+
+            for fn in sorted(self.fns):
+                if not fn.endswith(".h5"):
+                    continue
+                metadata, num_slices = self.slice_metadata(fn)
+                for slice_idx in range(num_slices):
+                    self.data += [(fn, slice_idx, metadata)]
+
+            if not self.fast_dev_run and os.path.isdir(self.data_path):
+                cache[self.data_path] = self.data
+                with open(cache_path, "w+b") as f:
+                    pickle.dump(cache, f)
+                print(f"Saved dataset cache to {os.path.abspath(cache_path)}.")
         self.rng.shuffle(self.data)
 
         if num_gpus > 1:

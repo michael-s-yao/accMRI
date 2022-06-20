@@ -17,6 +17,7 @@ from data.dataset import DiscriminatorSample
 
 sys.path.append("..")
 from helper.utils.math import fft2c, ifft2c
+from helper.utils import transforms as T
 
 
 class DiscriminatorDataTransform:
@@ -27,6 +28,7 @@ class DiscriminatorDataTransform:
 
     def __init__(
         self,
+        coil_compression: bool = False,
         rotation: Sequence[float] = [5.0, 15.0],
         dx: Sequence[float] = [0.05, 0.1],
         dy: Sequence[float] = [0.05, 0.1],
@@ -41,6 +43,9 @@ class DiscriminatorDataTransform:
     ):
         """
         Args:
+            coil_compression: whether or not to compress coil dimension from
+                15 (for fastMRI multicoil data) to 4 using SVD. Only
+                applicable for multicoil data.
             rotation: range of rotation magnitude about the center of the
                 image in degrees. The image will be rotated between
                 -theta and +theta degrees, where rotation[0] < abs(theta) <
@@ -63,8 +68,10 @@ class DiscriminatorDataTransform:
         """
         self.seed = seed
         self.rng = np.random.RandomState(self.seed)
-
         torch.manual_seed(self.seed)
+
+        self.coil_compression = coil_compression
+        self.num_compressed_coils = 4
         self.rotation = sorted(
             (abs(rotation[0] % 180), abs(rotation[-1] % 180))
         )
@@ -105,7 +112,27 @@ class DiscriminatorDataTransform:
         Returns:
             A DiscriminatorSample object.
         """
-        _, h, w, _ = kspace.size()
+        c, h, w, d = kspace.size()
+        # Apply coil compression if necessary.
+        if c > 1 and self.coil_compression:
+            # Convert to numpy.
+            kspace = kspace.detach().cpu().numpy()
+            kspace = kspace[..., 0] + (1j * kspace[..., -1])
+            kspace = np.reshape(kspace, (kspace.shape[0], -1))
+            u, _, _ = np.linalg.svd(
+                kspace, compute_uv=True, full_matrices=False
+            )
+            # Multiply kspace by the complex conjugate of the first
+            # self.num_compressed_coils left vectors.
+            kspace = np.reshape(
+                np.array(np.matmul(
+                    np.matrix(u[:, :self.num_compressed_coils]).H,
+                    kspace
+                )),
+                (self.num_compressed_coils, h, w)
+            )
+            kspace = T.to_tensor(kspace)
+
         lines_acquired = self.rng.randint(self.min_lines_acquired, w)
         lines_acquiring = self.rng.randint(1, self.max_lines_acquiring)
 

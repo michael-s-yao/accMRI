@@ -25,9 +25,11 @@ class DataModule(pl.LightningDataModule):
     def __init__(
         self,
         data_path: str,
-        train_dir: str = "singlecoil_train",
-        val_dir: str = "singlecoil_val",
-        test_dir: str = "singlecoil_test",
+        cache_path: Optional[str] = None,
+        coil_compression: bool = False,
+        train_dir: str = "multicoil_train",
+        val_dir: str = "multicoil_val",
+        test_dir: str = "multicoil_test",
         batch_size: int = 1,
         num_workers: int = 4,
         rotation: Sequence[float] = [10.0, 15.0],
@@ -47,6 +49,11 @@ class DataModule(pl.LightningDataModule):
         """
         Args:
             data_path: a string path to the kspace dataset.
+            cache_path: optional dataset cache file to use for faster dataset
+                load times.
+            coil_compression: whether or not to compress coil dimension from
+                15 (for fastMRI multicoil data) to 4 using SVD. Only
+                applicable for multicoil data.
             train_dir: a string path to the training set subdirectory.
             val_dir: a string path to the validation set subdirectory.
             test_dir: a string path to the test set subdirectory.
@@ -89,6 +96,7 @@ class DataModule(pl.LightningDataModule):
             datasets[key] = DiscriminatorDataset(
                 str(os.path.join(self.data_path, key)),
                 DiscriminatorDataTransform(
+                    coil_compression=coil_compression,
                     rotation=rotation,
                     dx=dx,
                     dy=dy,
@@ -103,7 +111,8 @@ class DataModule(pl.LightningDataModule):
                 ),
                 seed=seed,
                 fast_dev_run=fast_dev_run,
-                num_gpus=num_gpus
+                num_gpus=num_gpus,
+                dataset_cache_file=cache_path
             )
         self.train = datasets[train_dir]
         self.val = datasets[val_dir]

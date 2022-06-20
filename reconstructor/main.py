@@ -36,6 +36,7 @@ def main():
 
     datamodule = DataModule(
         data_path,
+        cache_path=args.cache_path,
         train_dir=train_dir,
         val_dir=val_dir,
         test_dir=test_dir,

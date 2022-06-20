@@ -21,6 +21,12 @@ class Main:
             help="Data path. Defaults to the configured Amulet data directory."
         )
         parser.add_argument(
+            "--cache_path",
+            type=str,
+            default=None,
+            help="Optional dataset cache file to use for faster load times."
+        )
+        parser.add_argument(
             "--model",
             type=str,
             default="varnet",

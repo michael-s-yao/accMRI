@@ -13,8 +13,11 @@ helper/data/
 .ipynb_checkpoints
 
 # Checkpoints
-.ckpt
+*.ckpt
 ckpts/
+
+# Dataset cache files
+*.pkl
 
 # Environments
 env/

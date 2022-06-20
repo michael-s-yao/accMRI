@@ -27,7 +27,7 @@ def main():
     num_coils = 1
     if args.multicoil:
         coil_prefix = "multicoil_"
-        num_coils = 15
+        num_coils = 4 if args.coil_compression else 15
     train_dir = coil_prefix + "train"
     val_dir = coil_prefix + "val"
     test_dir = coil_prefix + "test"
@@ -38,6 +38,8 @@ def main():
 
     datamodule = DataModule(
         data_path,
+        cache_path=args.cache_path,
+        coil_compression=args.coil_compression,
         train_dir=train_dir,
         val_dir=val_dir,
         test_dir=test_dir,

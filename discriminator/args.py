@@ -18,6 +18,17 @@ def build_args() -> argparse.Namespace:
         help="A folder containing train, val, and test data subdirectories."
     )
     parser.add_argument(
+        "--cache_path",
+        type=str,
+        default=None,
+        help="Optional dataset cache file to use for faster load times."
+    )
+    parser.add_argument(
+        "--coil_compression",
+        action="store_true",
+        help="Compress multicoil data to 4 coils with largest singular values."
+    )
+    parser.add_argument(
         "--multicoil",
         action="store_true",
         help="Explicitly specify whether to use multicoil data."

@@ -26,6 +26,7 @@ class DataModule(pl.LightningDataModule):
     def __init__(
         self,
         data_path: Union[Path, str],
+        cache_path: Optional[str] = None,
         train_dir: str = "multicoil_train",
         val_dir: str = "multicoil_val",
         test_dir: str = "multicoil_test",
@@ -40,6 +41,8 @@ class DataModule(pl.LightningDataModule):
         """
         Args:
             data_path: a string path to the reconstruction dataset.
+            cache_path: optional dataset cache file to use for faster dataset
+                load times.
             train_dir: a string path to the training subdirectory.
             val_dir: a string path to the validation subdirectory.
             test_dir: a string path to the test set subdirectory.
@@ -89,7 +92,8 @@ class DataModule(pl.LightningDataModule):
             seed=seed,
             fast_dev_run=fast_dev_run,
             multicoil=multicoil,
-            num_gpus=num_gpus
+            num_gpus=num_gpus,
+            dataset_cache_file=cache_path
         )
         self.val = ReconstructorDataset(
             str(os.path.join(self.data_path, val_dir)),
@@ -103,7 +107,8 @@ class DataModule(pl.LightningDataModule):
             seed=seed,
             fast_dev_run=fast_dev_run,
             multicoil=multicoil,
-            num_gpus=num_gpus
+            num_gpus=num_gpus,
+            dataset_cache_file=cache_path
         )
         self.test = ReconstructorDataset(
             str(os.path.join(self.data_path, test_dir)),
@@ -114,7 +119,8 @@ class DataModule(pl.LightningDataModule):
             seed=seed,
             fast_dev_run=fast_dev_run,
             multicoil=multicoil,
-            num_gpus=num_gpus
+            num_gpus=num_gpus,
+            dataset_cache_file=cache_path
         )
         self.predict = None
 
