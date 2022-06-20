@@ -10,7 +10,10 @@ from args import Inference
 import matplotlib.pyplot as plt
 import os
 from pytorch_lightning import Trainer
+import requests
 import sys
+import torch
+from tqdm import tqdm
 from typing import List, Dict, Any
 import yaml
 
@@ -40,6 +43,8 @@ def load_models(lightning_logs: str) -> List[Dict[str, Any]]:
     models = []
     for f in sorted(os.listdir(lightning_logs)):
         if not os.path.isdir(os.path.join(lightning_logs, f)):
+            continue
+        if f == "fair":
             continue
         hparams = None
         with open(os.path.join(lightning_logs, f, "hparams.yaml"), "r") as p:
@@ -84,7 +89,44 @@ def load_models(lightning_logs: str) -> List[Dict[str, Any]]:
             "center_crop": tuple(hparams["center_crop"]),
         })
 
+    # fastMRI models.
+    FAIR = "https://dl.fbaipublicfiles.com/fastMRI/trained_models/varnet/"
+    VARNET = {
+        "KNEE": "knee_leaderboard_state_dict.pt",
+    }
+    if not os.path.isdir(os.path.join(lightning_logs, "fair")):
+        os.mkdir(os.path.join(lightning_logs, "fair"))
+    models.append({
+        "key": "[" + str(len(models)) + "] FAIR Multicoil VarNet",
+        "model": os.path.abspath(
+            os.path.join(lightning_logs, "fair", "knee.ckpt")
+        ),
+        "model_type": "varnet",
+        "center_crop": (320, 320),
+    })
+    if not os.path.isfile(models[-1]["model"]):
+        download_model(FAIR + VARNET["KNEE"], models[-1]["model"])
+
     return models
+
+
+def download_model(url, fname):
+    if os.path.isfile(fname):
+        print(f"{fname} is already a locally downloaded model. Exiting...")
+        return
+    response = requests.get(url, timeout=10, stream=True)
+    chunk_size = 8 * 1024 * 1024  # 8 MB chunks
+    total_size_in_bytes = int(response.headers.get("content-length", 0))
+    progress_bar = tqdm(
+        desc="Downloading model state_dict",
+        total=total_size_in_bytes,
+        unit="iB",
+        unit_scale=True
+    )
+    with open(fname, "w+b") as fh:
+        for chunk in response.iter_content(chunk_size):
+            progress_bar.update(len(chunk))
+            fh.write(chunk)
 
 
 def infer():
@@ -115,7 +157,14 @@ def infer():
         test_dir=None,
         center_crop=models[model_option]["center_crop"]
     )
-    infer_model = ReconstructorModule.load_from_checkpoint(ckpt_path)
+    if "fair" not in ckpt_path.lower():
+        infer_model = ReconstructorModule.load_from_checkpoint(ckpt_path)
+    else:
+        infer_model = ReconstructorModule(model="varnet", is_multicoil=True)
+        infer_model.reconstructor.model.load_state_dict(
+            torch.load(ckpt_path)
+        )
+    infer_model.reconstructor = infer_model.reconstructor.eval()
     trainer = Trainer(
         accelerator="auto",
         devices="auto",
@@ -131,8 +180,14 @@ def infer():
         save_predictions(predictions, args.save_path)
 
 
-def save_predictions(predictions: List[dict], save_path: str):
+def save_predictions(predictions: List[dict], save_path: str) -> None:
     """
+    Plots predictions and saves to `save_path` folder in working directory.
+    Input:
+        predictions: a list of predictions.
+        save_path: relatvie folder path to save to.
+    Returns:
+        None.
     """
     if not os.path.exists(save_path):
         os.makedirs(save_path)
@@ -153,7 +208,7 @@ def save_predictions(predictions: List[dict], save_path: str):
             axtarg.set_title(
                 "SSIM: " + format(prediction["ssim"].item(), ".3f")
             )
-        
+
         fig.suptitle(
             "Acceleration Factor: " + format(prediction["acc_factor"], ".3f")
         )

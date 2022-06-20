@@ -6,6 +6,7 @@ Author(s):
 
 Licensed under the MIT License.
 """
+import os
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
 import time
@@ -31,8 +32,12 @@ def main():
     val_dir = coil_prefix + "val"
     test_dir = coil_prefix + "test"
 
+    data_path = args.data_path
+    if data_path is None or len(data_path) == 0:
+        data_path = os.environ["AMLT_DATA_DIR"]
+
     datamodule = DataModule(
-        args.data_path,
+        data_path,
         train_dir=train_dir,
         val_dir=val_dir,
         test_dir=test_dir,
@@ -64,7 +69,8 @@ def main():
     log_every_n_steps = 1 if args.fast_dev_run else 50
     start = str(int(time.time()))
     checkpoint_callback = ModelCheckpoint(
-        every_n_epochs=5,
+        every_n_epochs=1,
+        dirpath=os.environ.get("AMLT_OUTPUT_DIR", None),
         filename=("discriminator-" + start + "-{epoch}-{validation_loss}"),
         monitor="validation_loss",
         save_last=True
@@ -80,7 +86,7 @@ def main():
     )
 
     if args.mode.lower() in ("both", "train"):
-        trainer.fit(model, datamodule=datamodule)
+        trainer.fit(model, datamodule=datamodule, ckpt_path=args.ckpt_path)
     if args.mode.lower() in ("both", "test"):
         trainer.test(model, dataloaders=datamodule)
 

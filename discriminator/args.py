@@ -12,8 +12,9 @@ import argparse
 def build_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="k-space discriminator.")
     parser.add_argument(
-        "data_path",
+        "--data_path",
         type=str,
+        default="",
         help="A folder containing train, val, and test data subdirectories."
     )
     parser.add_argument(
@@ -157,6 +158,12 @@ def build_args() -> argparse.Namespace:
         type=int,
         default=0,
         help="Number of GPUs in use."
+    )
+    parser.add_argument(
+        "--ckpt_path",
+        type=str,
+        default=None,
+        help="Optional path to checkpoint to resume training from."
     )
 
     return parser.parse_args()

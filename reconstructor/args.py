@@ -160,6 +160,12 @@ class Main:
             default=0,
             help="Number of GPUs in use."
         )
+        parser.add_argument(
+            "--ckpt_path",
+            type=str,
+            default=None,
+            help="Optional path to checkpoint to resume training from."
+        )
 
         return parser.parse_args()
 

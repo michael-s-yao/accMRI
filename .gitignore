@@ -12,6 +12,10 @@ helper/data/
 # Jupyter Notebook
 .ipynb_checkpoints
 
+# Checkpoints
+.ckpt
+ckpts/
+
 # Environments
 env/
 
@@ -41,6 +45,7 @@ discriminator/log/
 .amltconfig
 .amltignore
 *.yaml
+amlt/
 
 # InnerEye
 InnerEye/

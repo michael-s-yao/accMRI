@@ -282,11 +282,11 @@ class ReconstructorModule(pl.LightningModule):
                 output.unsqueeze(0), target.unsqueeze(0), batch.max_value
             )
         else:
-            target = None 
+            target = None
             ssim = -1
         if target is not None:
             target = target.detach().cpu().numpy()
-        
+
         accfactor = batch.mask.size()[-1] / torch.sum(batch.mask, dim=1).item()
         return {
             "fname": batch.fn,

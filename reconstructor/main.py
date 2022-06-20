@@ -67,6 +67,7 @@ def main():
     start = str(int(time.time()))
     checkpoint_callback = ModelCheckpoint(
         every_n_epochs=5,
+        dirpath=os.environ.get("AMLT_OUTPUT_DIR", None),
         filename=("reconstructor-" + start + "-{epoch}-{validation_loss}"),
         monitor="validation_loss",
         save_last=True
@@ -83,7 +84,7 @@ def main():
         auto_select_gpus=True,
     )
     if args.mode.lower() in ("both", "train"):
-        trainer.fit(model, datamodule=datamodule)
+        trainer.fit(model, datamodule=datamodule, ckpt_path=args.ckpt_path)
     if args.mode.lower() in ("both", "test"):
         trainer.test(model, dataloaders=datamodule)
 
