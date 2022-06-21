@@ -69,13 +69,12 @@ class ReconstructorDataset(Dataset):
         self.data_path = data_path
         self.dataset_cache_file = dataset_cache_file
         if self.dataset_cache_file is None:
-            cache_path = os.environ.get("AMLT_OUTPUT_DIR", "./")
             if "multicoil" in data_path.lower():
-                cache_path += "multicoil_"
+                cache_path = "multicoil_"
             elif "singlecoil" in data_path.lower():
-                cache_path += "singlecoil_"
+                cache_path = "singlecoil_"
             else:
-                cache_path += "coil_"
+                cache_path = "coil_"
             if "knee" in data_path.lower():
                 cache_path += "knee_"
             elif "brain" in data_path.lower():
@@ -83,7 +82,10 @@ class ReconstructorDataset(Dataset):
             else:
                 cache_path += "anatomy_"
             cache_path += "cache.pkl"
-            self.dataset_cache_file = cache_path
+            self.dataset_cache_file = os.path.join(
+                os.environ.get("AMLT_OUTPUT_DIR", "./"),
+                cache_path
+            )
 
         if os.path.isfile(self.dataset_cache_file):
             with open(self.dataset_cache_file, "rb") as f:
