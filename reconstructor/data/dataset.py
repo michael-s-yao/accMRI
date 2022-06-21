@@ -92,7 +92,7 @@ class ReconstructorDataset(Dataset):
                 cache = pickle.load(f)
         else:
             cache = {}
-        self.data = cache.get(self.data_path, [])
+        self.data = cache.get(os.path.basename(self.data_path), [])
         self.fns = None
         if len(self.data) > 0:
             print(f"Using data cache file {self.dataset_cache_file}.")
@@ -119,7 +119,7 @@ class ReconstructorDataset(Dataset):
                     self.data += [(fn, slice_idx, metadata)]
 
             if not self.fast_dev_run and os.path.isdir(self.data_path):
-                cache[self.data_path] = self.data
+                cache[os.path.basename(self.data_path)] = self.data
                 with open(cache_path, "w+b") as f:
                     pickle.dump(cache, f)
                 print(f"Saved dataset cache to {os.path.abspath(cache_path)}.")

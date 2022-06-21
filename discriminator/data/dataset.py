@@ -70,13 +70,12 @@ class DiscriminatorDataset(Dataset):
         self.data_path = data_path
         self.dataset_cache_file = dataset_cache_file
         if self.dataset_cache_file is None:
-            cache_path = os.environ.get("AMLT_OUTPUT_DIR", "./")
             if "multicoil" in data_path.lower():
-                cache_path += "multicoil_"
+                cache_path = "multicoil_"
             elif "singlecoil" in data_path.lower():
-                cache_path += "singlecoil_"
+                cache_path = "singlecoil_"
             else:
-                cache_path += "coil_"
+                cache_path = "coil_"
             if "knee" in data_path.lower():
                 cache_path += "knee_"
             elif "brain" in data_path.lower():
@@ -84,14 +83,17 @@ class DiscriminatorDataset(Dataset):
             else:
                 cache_path += "anatomy_"
             cache_path += "cache.pkl"
-            self.dataset_cache_file = cache_path
+            self.dataset_cache_file = os.path.join(
+                os.environ.get("AMLT_OUTPUT_DIR", "./"),
+                cache_path
+            )
 
         if os.path.isfile(self.dataset_cache_file):
             with open(self.dataset_cache_file, "rb") as f:
                 cache = pickle.load(f)
         else:
             cache = {}
-        self.data = cache.get(self.data_path, [])
+        self.data = cache.get(os.path.basename(self.data_path), [])
         self.fns = None
         if len(self.data) > 0:
             print(f"Using data cache file {self.dataset_cache_file}.")
@@ -118,7 +120,7 @@ class DiscriminatorDataset(Dataset):
                     self.data += [(fn, slice_idx, metadata)]
 
             if not self.fast_dev_run and os.path.isdir(self.data_path):
-                cache[self.data_path] = self.data
+                cache[os.path.basename(self.data_path)] = self.data
                 with open(cache_path, "w+b") as f:
                     pickle.dump(cache, f)
                 print(f"Saved dataset cache to {os.path.abspath(cache_path)}.")

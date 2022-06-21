@@ -67,7 +67,7 @@ def main():
     log_every_n_steps = 1 if args.fast_dev_run else 50
     start = str(int(time.time()))
     checkpoint_callback = ModelCheckpoint(
-        every_n_epochs=5,
+        every_n_epochs=1,
         dirpath=os.environ.get("AMLT_OUTPUT_DIR", None),
         filename=("reconstructor-" + start + "-{epoch}-{validation_loss}"),
         monitor="validation_loss",
