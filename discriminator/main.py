@@ -10,13 +10,13 @@ import os
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
 import time
-from args import build_args
+from args import Main
 from pl_modules.data_module import DataModule
 from pl_modules.discriminator_module import DiscriminatorModule
 
 
 def main():
-    args = build_args()
+    args = Main.build_args()
 
     seed = args.seed
     if seed is None or seed < 0:

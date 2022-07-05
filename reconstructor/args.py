@@ -12,7 +12,7 @@ import argparse
 class Main:
     @staticmethod
     def build_args() -> argparse.Namespace:
-        parser = argparse.ArgumentParser()
+        parser = argparse.ArgumentParser(description="MRI Image Reconstructor")
 
         parser.add_argument(
             "--data_path",
@@ -179,7 +179,7 @@ class Main:
 class Inference:
     @staticmethod
     def build_args() -> argparse.Namespace:
-        parser = argparse.ArgumentParser()
+        parser = argparse.ArgumentParser(description="MRI Image Reconstructor")
 
         parser.add_argument(
             "data_path",
@@ -201,8 +201,27 @@ class Inference:
         parser.add_argument(
             "--save_path",
             type=str,
-            default="./predictions",
+            default=None,
             help="Save path for image reconstructions from input dataset."
+        )
+        parser.add_argument(
+            "--use_zero_filled",
+            action="store_true",
+            help="Use zero-filled baseline reconstructor."
+        )
+        parser.add_argument(
+            "--use_fair",
+            action="store_true",
+            help="Use E2EVarNet fastMRI model from Sriram et al (2020)."
+        )
+        fixed_acceleration_help = "Acceleration factor to use for inference. "
+        fixed_acceleration_help += "Only applies for non-test datasets. "
+        fixed_acceleration_help += "Default variable acceleration."
+        parser.add_argument(
+            "--fixed_acceleration",
+            type=float,
+            default=None,
+            help=fixed_acceleration_help
         )
 
         return parser.parse_args()

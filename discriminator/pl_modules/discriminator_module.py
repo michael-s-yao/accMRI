@@ -173,6 +173,8 @@ class DiscriminatorModule(pl.LightningModule):
         self.log(
             "validation_loss", val_loss / tot_slice_examples, prog_bar=True
         )
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
     def test_step(self, batch, batch_idx):
         acquired = T.apply_mask(batch.ref_kspace, batch.sampled_mask)

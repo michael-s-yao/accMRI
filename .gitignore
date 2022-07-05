@@ -53,3 +53,5 @@ amlt/
 # InnerEye
 InnerEye/
 InnerEye-DeepLearning/
+
+*.out

@@ -26,7 +26,7 @@ class DataModule(pl.LightningDataModule):
         self,
         data_path: str,
         cache_path: Optional[str] = None,
-        coil_compression: bool = False,
+        coil_compression: int = -1,
         train_dir: str = "multicoil_train",
         val_dir: str = "multicoil_val",
         test_dir: str = "multicoil_test",

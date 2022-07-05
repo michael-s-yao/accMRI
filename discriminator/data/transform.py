@@ -28,7 +28,7 @@ class DiscriminatorDataTransform:
 
     def __init__(
         self,
-        coil_compression: bool = False,
+        coil_compression: int = -1,
         rotation: Sequence[float] = [5.0, 15.0],
         dx: Sequence[float] = [0.05, 0.1],
         dy: Sequence[float] = [0.05, 0.1],
@@ -112,27 +112,7 @@ class DiscriminatorDataTransform:
         Returns:
             A DiscriminatorSample object.
         """
-        c, h, w, d = kspace.size()
-        # Apply coil compression if necessary.
-        if c > 1 and self.coil_compression:
-            # Convert to numpy.
-            kspace = kspace.detach().cpu().numpy()
-            kspace = kspace[..., 0] + (1j * kspace[..., -1])
-            kspace = np.reshape(kspace, (kspace.shape[0], -1))
-            u, _, _ = np.linalg.svd(
-                kspace, compute_uv=True, full_matrices=False
-            )
-            # Multiply kspace by the complex conjugate of the first
-            # self.num_compressed_coils left vectors.
-            kspace = np.reshape(
-                np.array(np.matmul(
-                    np.matrix(u[:, :self.num_compressed_coils]).H,
-                    kspace
-                )),
-                (self.num_compressed_coils, h, w)
-            )
-            kspace = T.to_tensor(kspace)
-
+        c, h, w, _ = kspace.size()
         lines_acquired = self.rng.randint(self.min_lines_acquired, w)
         lines_acquiring = self.rng.randint(1, self.max_lines_acquiring)
 
@@ -214,9 +194,52 @@ class DiscriminatorDataTransform:
                 distorted_kspace, locs
             )
 
+        compressed_kspace = kspace.clone()
+        compressed_distorted = distorted_kspace.clone()
+        # Apply coil compression if specified.
+        if c > 1 and self.coil_compression > 0 and self.coil_compression < c:
+            # Convert to numpy.
+            compressed_kspace = compressed_kspace.detach().cpu().numpy()
+            compressed_distorted = compressed_distorted.detach().cpu().numpy()
+
+            compressed_kspace = compressed_kspace[..., 0] + (
+                1j * compressed_kspace[..., -1]
+            )
+            compressed_distorted = compressed_distorted[..., 0] + (
+                1j * compressed_distorted[..., -1]
+            )
+
+            compressed_kspace = np.reshape(
+                compressed_kspace, (compressed_kspace.shape[0], -1)
+            )
+            compressed_distorted = np.reshape(
+                compressed_distorted, (compressed_distorted.shape[0], -1)
+            )
+            u, _, _ = np.linalg.svd(
+                compressed_kspace, compute_uv=True, full_matrices=False
+            )
+            # Multiply kspace by the complex conjugate of the first
+            # self.num_compressed_coils left vectors.
+            compressed_kspace = np.reshape(
+                np.array(np.matmul(
+                    np.matrix(u[:, :self.num_compressed_coils]).H,
+                    compressed_kspace
+                )),
+                (self.num_compressed_coils, h, w)
+            )
+            compressed_distorted = np.reshape(
+                np.array(np.matmul(
+                    np.matrix(u[:, :self.num_compressed_coils]).H,
+                    compressed_distorted
+                )),
+                (self.num_compressed_coils, h, w)
+            )
+            compressed_kspace = T.to_tensor(compressed_kspace)
+            compressed_distorted = T.to_tensor(compressed_distorted)
+
         return DiscriminatorSample(
-            kspace,
-            distorted_kspace,
+            compressed_kspace,
+            compressed_distorted,
             theta,
             deltax,
             deltay,
@@ -224,7 +247,9 @@ class DiscriminatorDataTransform:
             acquiring_mask.type(torch.float32),
             metadata,
             fn,
-            slice_idx
+            slice_idx,
+            kspace,
+            distorted_kspace
         )
 
     def masks(
