@@ -185,16 +185,21 @@ class ReconstructorDataTransform:
         """
         center_mask = self.center_mask(width, center_frac)
         mask = torch.clone(center_mask)
-        num_high_freqs = self.rng.randint(
-            max(self.min_lines_acquired - torch.sum(center_mask), 0),
-            width - torch.sum(center_mask),
-        )
-        if self.fixed_acceleration is not None and self.fixed_acceleration < 1:
-            num_high_freqs = int(torch.div(
+        if self.fixed_acceleration is not None:
+            acc_factor = self.rng.choice(self.fixed_acceleration)
+            num_high_freqs = int(
+                int(width / acc_factor) - torch.sum(
+                    center_mask
+                ).item()
+            )
+            num_high_freqs = max(
+                0, min(width - torch.sum(center_mask).item(), num_high_freqs)
+            )
+        else:
+            num_high_freqs = self.rng.randint(
+                max(self.min_lines_acquired - torch.sum(center_mask), 0),
                 width - torch.sum(center_mask),
-                self.fixed_acceleration,
-                rounding_mode="floor"
-            ).item())
+            )
         idxs = self.rng.choice(
             torch.squeeze(
                 torch.nonzero(center_mask < 1.0, as_tuple=False), dim=-1

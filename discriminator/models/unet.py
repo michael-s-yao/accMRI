@@ -130,8 +130,8 @@ class NormUNet(nn.Module):
 
     def __init__(
         self,
-        in_chans: int,
-        out_chans: int,
+        in_chans: int = 2,
+        out_chans: int = 2,
         init_conv_chans: int = 32,
         num_pool_layers: int = 4,
         drop_prob: Optional[float] = 0.0,

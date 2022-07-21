@@ -41,6 +41,7 @@ class ReconstructorModule(pl.LightningModule):
         weight_decay: float = 0.0,
         num_log_images: int = 16,
         save_reconstructions: bool = False,
+        use_zero_filled: bool = False,
     ):
         """
         Args:
@@ -61,6 +62,7 @@ class ReconstructorModule(pl.LightningModule):
             num_log_images: number of images to log.
             save_reconstructions: whether to save the image reconstructions
                 from the test dataset.
+            use_zero_filled: use zero-filled baseline reconstructor.
         """
         super().__init__()
         self.save_hyperparameters()
@@ -96,6 +98,7 @@ class ReconstructorModule(pl.LightningModule):
             sens_chans=self.sens_chans,
             sens_pools=self.sens_pools,
             sens_drop_prob=self.sens_drop_prob,
+            use_zero_filled=use_zero_filled,
         )
 
         self.loss = SSIMLoss()
@@ -234,8 +237,6 @@ class ReconstructorModule(pl.LightningModule):
         }
 
     def log_image(self, name: str, image: torch.Tensor) -> None:
-        if torch.max(image) <= 1.0:
-            image = image * 255.0
         self.logger.experiment.add_image(
             name, image, global_step=self.global_step
         )
@@ -284,17 +285,15 @@ class ReconstructorModule(pl.LightningModule):
         else:
             target = None
             ssim = -1
+
         if target is not None:
             target = target.detach().cpu().numpy()
-
-        accfactor = batch.mask.size()[-1] / torch.sum(batch.mask, dim=1).item()
         return {
             "fname": batch.fn,
             "slice_num": batch.slice_idx,
             "output": output.detach().cpu().numpy(),
             "target": target,
             "ssim": ssim,
-            "acc_factor": accfactor,
         }
 
     def configure_optimizers(self):

@@ -32,7 +32,7 @@ def main():
 
     data_path = args.data_path
     if data_path is None or len(data_path) == 0:
-        data_path = os.environ["AMLT_DATA_DIR"]
+        data_path = os.environ.get("AMLT_DATA_DIR", "")
 
     datamodule = DataModule(
         data_path,
@@ -46,7 +46,9 @@ def main():
         fixed_acceleration=args.fixed_acceleration,
         seed=seed,
         fast_dev_run=args.fast_dev_run,
-        num_gpus=args.num_gpus
+        num_gpus=args.num_gpus,
+        tl=args.tl,
+        num_coils=args.num_coils,
     )
     model = ReconstructorModule(
         model=args.model,
@@ -82,6 +84,8 @@ def main():
         accelerator="auto",
         devices="auto",
         strategy="ddp",
+        replace_sampler_ddp=False,
+        default_root_dir=os.environ.get("AMLT_OUTPUT_DIR", None),
         auto_select_gpus=True,
     )
     if args.mode.lower() in ("both", "train"):

@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 import pytorch_lightning as pl
 import sys
 import torch
-from typing import Optional, Sequence
+from typing import Optional, Sequence, Tuple
 from data.dataset import DiscriminatorDataset, DiscriminatorSample
 from data.transform import DiscriminatorDataTransform
 
@@ -44,7 +44,9 @@ class DataModule(pl.LightningDataModule):
         max_lines_acquiring: int = 12,
         seed: Optional[int] = None,
         fast_dev_run: bool = False,
-        num_gpus: int = 0
+        num_gpus: int = 0,
+        is_mlp: bool = True,
+        center_crop: Optional[Tuple[int]] = (-1, -1),
     ):
         """
         Args:
@@ -80,6 +82,8 @@ class DataModule(pl.LightningDataModule):
             seed: optional random seed.
             fast_dev_run: whether we are running a test fast_dev_run.
             num_gpus: number of GPUs in use.
+            is_mlp: specify whether discriminator is an MLP network.
+            center_crop: kspace center crop dimensions. Default no center crop.
         """
         super().__init__()
 
@@ -93,6 +97,11 @@ class DataModule(pl.LightningDataModule):
         datasets = {}
         keys = [train_dir, val_dir, test_dir]
         for key in keys:
+            split = None
+            if key == keys[1]:
+                split = "val"
+            elif key == keys[-1]:
+                split = "test"
             datasets[key] = DiscriminatorDataset(
                 str(os.path.join(self.data_path, key)),
                 DiscriminatorDataTransform(
@@ -108,11 +117,15 @@ class DataModule(pl.LightningDataModule):
                     min_lines_acquired=min_lines_acquired,
                     max_lines_acquiring=max_lines_acquiring,
                     seed=seed,
+                    is_mlp=is_mlp,
                 ),
                 seed=seed,
                 fast_dev_run=fast_dev_run,
                 num_gpus=num_gpus,
-                dataset_cache_file=cache_path
+                dataset_cache_file=cache_path,
+                is_mlp=is_mlp,
+                split=split,
+                center_crop=center_crop
             )
         self.train = datasets[train_dir]
         self.val = datasets[val_dir]

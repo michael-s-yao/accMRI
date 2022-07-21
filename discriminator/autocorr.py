@@ -10,13 +10,18 @@ Licensed under the MIT License. Copyright Microsoft Research 2022.
 """
 import argparse
 import h5py
-import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
+import numpy as np
 import os
 from pathlib import Path
+import pickle
 import time
 from typing import Dict, Optional, Sequence, Tuple, Union
 import xml.etree.ElementTree as etree
+
+matplotlib.rcParams["mathtext.fontset"] = "stix"
+matplotlib.rcParams["font.family"] = "STIXGeneral"
 
 
 def et_query(
@@ -119,6 +124,8 @@ def X(
     crop_size: Tuple[int] = (128, 128),
     max_n: Optional[int] = -1,
     seed: Optional[int] = None,
+    cache_path: Optional[str] = None,
+    cache_key: Optional[str] = "",
 ) -> np.ndarray:
     """
     Import kspace data from path directory into a single X input matrix.
@@ -127,17 +134,33 @@ def X(
         crop_size: center crop for kspace data of shape HW.
         max_n: optional maximum number of slices to import. Default no max.
         seed: optional random seed.
+        cache_path: optional path to dataset cache file to use.
+        cache_key: optional key to specify which list to import from cache
+            file.
     Returns:
         A matrix of shape (HW)N, where HW is flattened length of input slices
         and N is the total number of imported slices.
     """
     data = []
-    for fn in sorted(os.listdir(path)):
-        if not fn.endswith(".h5"):
-            continue
-        metadata, num_slices = slice_metadata(os.path.join(path, fn))
-        for slice_idx in range(num_slices):
-            data.append((fn, slice_idx, metadata))
+    if cache_path is not None and os.path.isfile(cache_path):
+        with open(cache_path, "rb") as f:
+            cache = pickle.load(f)
+        data = cache.get(cache_key, [])
+    if len(data) > 0:
+        print(f"Using cache file {cache_path}.")
+        good_data = []
+        for item in data:
+            good_data.append(
+                (os.path.join(path, item[0].stem + ".h5"),) + item[1:]
+            )
+        data = good_data
+    else:
+        for fn in sorted(os.listdir(path)):
+            if not fn.endswith(".h5"):
+                continue
+            metadata, num_slices = slice_metadata(os.path.join(path, fn))
+            for slice_idx in range(num_slices):
+                data.append((fn, slice_idx, metadata))
 
     np.random.RandomState(seed).shuffle(data)
     if max_n > 0 and len(data) > max_n:
@@ -237,7 +260,7 @@ def build_args() -> argparse.Namespace:
         nargs=2,
         default=(128, 128),
         required=True,
-        help=""
+        help="kspace center crop dimensions. Default 128 x 128."
     )
     parser.add_argument(
         "--max_n",
@@ -263,24 +286,77 @@ def build_args() -> argparse.Namespace:
         default=None,
         help="matplotlib color map for plotting. Default `viridis`."
     )
+    parser.add_argument(
+        "--plotval",
+        type=str,
+        choices=("magnitude", "phase"),
+        default="magnitude",
+        help="Plot either the magnitude or phase of generated heatmaps."
+    )
+    parser.add_argument(
+        "--cache_path",
+        type=str,
+        default=None,
+        help="Optional dataset cache file."
+    )
+    parser.add_argument(
+        "--cache_key",
+        type=str,
+        default=None,
+        help="Optional cache key specification. Default is data_path value."
+    )
 
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = build_args()
+    scale_factor = int(1e10)
+    cache_key = args.cache_key
+    if cache_key is None:
+        cache_key = args.data_path
 
-    RXX = autocorr(X(args.data_path, args.center_crop, args.max_n, args.seed))
-    if args.savepath is not None:
+    RXX = autocorr(
+        X(
+            args.data_path,
+            args.center_crop,
+            args.max_n,
+            args.seed,
+            args.cache_path,
+            cache_key
+        )
+    )
+    if args.savepath.lower() != "none":
+        if not os.path.isdir(args.savepath):
+            os.mkdir(args.savepath)
         for i in range(args.center_crop[-1]):
             plt.gca()
-            plt.imshow(
-                np.abs(heatmap(RXX, i, crop_size=args.center_crop)),
-                cmap=args.cmap
-            )
-            plt.colorbar()
-            plt.savefig(
-                os.path.join(args.savepath, f"{i}_mag.png"),
-                bbox_inches="tight"
-            )
+            if args.plotval.lower() == "phase":
+                plt.imshow(
+                    scale_factor * np.angle(
+                        heatmap(RXX, i, crop_size=args.center_crop)
+                    ),
+                    cmap=args.cmap
+                )
+            else:
+                plt.imshow(
+                    scale_factor * np.abs(
+                        heatmap(RXX, i, crop_size=args.center_crop)
+                    ),
+                    cmap=args.cmap
+                )
+            plt.colorbar(orientation="horizontal", pad=0.01, fraction=0.047)
+            plt.axis("off")
+            if args.plotval.lower() == "phase":
+                plt.savefig(
+                    os.path.join(args.savepath, f"{i}_phase.png"),
+                    bbox_inches="tight",
+                    dpi=600
+                )
+            else:
+                plt.savefig(
+                    os.path.join(args.savepath, f"{i}_mag.png"),
+                    bbox_inches="tight",
+                    dpi=600
+                )
             plt.close()

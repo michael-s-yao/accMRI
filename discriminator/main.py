@@ -8,7 +8,7 @@ Licensed under the MIT License.
 """
 import os
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks import ModelCheckpoint, TQDMProgressBar
 import time
 from args import Main
 from pl_modules.data_module import DataModule
@@ -28,9 +28,13 @@ def main():
     if args.multicoil:
         coil_prefix = "multicoil_"
         num_coils = 4 if args.coil_compression else 15
+    is_mlp = args.model.lower() in ["mlp", "cnn"]
     train_dir = coil_prefix + "train"
     val_dir = coil_prefix + "val"
-    test_dir = coil_prefix + "test"
+    if is_mlp:
+        test_dir = coil_prefix + "val"
+    else:
+        test_dir = coil_prefix + "test_v2"
 
     data_path = args.data_path
     if data_path is None or len(data_path) == 0:
@@ -57,16 +61,20 @@ def main():
         max_lines_acquiring=args.max_lines_acquiring,
         seed=seed,
         fast_dev_run=args.fast_dev_run,
-        num_gpus=args.num_gpus
+        num_gpus=args.num_gpus,
+        is_mlp=is_mlp,
+        center_crop=args.center_crop
     )
     model = DiscriminatorModule(
         num_coils=num_coils,
         chans=args.chans,
         pools=args.pools,
+        model=args.model,
         lr=args.lr,
         lr_step_size=args.lr_step_size,
         lr_gamma=args.lr_gamma,
-        weight_decay=args.weight_decay
+        weight_decay=args.weight_decay,
+        center_crop=args.center_crop
     )
     log_every_n_steps = 1 if args.fast_dev_run else 50
     start = str(int(time.time()))
@@ -77,11 +85,14 @@ def main():
         monitor="validation_loss",
         save_last=True
     )
+
+    progbar_refresh_rate = 100
+    progressbar_callback = TQDMProgressBar(refresh_rate=progbar_refresh_rate)
     trainer = pl.Trainer(
         max_epochs=args.max_epochs,
         fast_dev_run=args.fast_dev_run,
         log_every_n_steps=log_every_n_steps,
-        callbacks=[checkpoint_callback],
+        callbacks=[checkpoint_callback, progressbar_callback],
         accelerator="auto",
         devices="auto",
         auto_select_gpus=True,

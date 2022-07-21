@@ -22,7 +22,7 @@ from helper.utils import transforms as T
 
 class DiscriminatorDataTransform:
     """
-    Data transformer for training and validating TIVarNet models. Randomly
+    Data transformer for training and validating discriminator models. Randomly
     masks data according to specifications.
     """
 
@@ -40,6 +40,9 @@ class DiscriminatorDataTransform:
         min_lines_acquired: int = 8,
         max_lines_acquiring: int = 12,
         seed: Optional[int] = None,
+        is_mlp: bool = True,
+        center_frac: Optional[int] = 0.04,
+        inference: bool = False,
     ):
         """
         Args:
@@ -65,13 +68,18 @@ class DiscriminatorDataTransform:
             max_lines_acquiring: maximum number of lines in a single
                 acquisition.
             seed: optional random seed.
+            is_mlp: specify whether discriminator is an MLP network.
+            center_frac: fraction of low-frequency columns to be retained.
+                Only required is is_mlp is True.
+            inference: whether or not we are running inference.
         """
         self.seed = seed
+        self.is_mlp = is_mlp
+        self.center_frac = center_frac
         self.rng = np.random.RandomState(self.seed)
         torch.manual_seed(self.seed)
 
         self.coil_compression = coil_compression
-        self.num_compressed_coils = 4
         self.rotation = sorted(
             (abs(rotation[0] % 180), abs(rotation[-1] % 180))
         )
@@ -94,6 +102,7 @@ class DiscriminatorDataTransform:
         self.max_rf_cont = max_rf_cont
         self.min_lines_acquired = min_lines_acquired
         self.max_lines_acquiring = max_lines_acquiring
+        self.inference = inference
 
     def __call__(
         self,
@@ -105,7 +114,7 @@ class DiscriminatorDataTransform:
         """
         Generate a kspace mask and apply it on the training kspace data.
         Input:
-            kspace: input multi-coil kspace data of shape CHW2.
+            kspace: input kspace data of shape CHW2.
             metadata: metadata associated with dataset.
             fn: name of the original data file.
             slice_idx: index of slice from original dataset.
@@ -126,7 +135,13 @@ class DiscriminatorDataTransform:
 
         cimg = ifft2c(kspace)
         # 2. Apply affine transform.
-        if self.rng.uniform() < self.p:
+        no_affine_transform = self.rotation == (0.0, 0.0)
+        no_affine_transform = no_affine_transform and self.dx == (0.0, 0.0)
+        no_affine_transform = no_affine_transform and self.dy == (0.0, 0.0)
+        if no_affine_transform:
+            theta, deltax, deltay = 0.0, 0.0, 0.0
+            distorted_target = cimg.clone()
+        elif self.rng.uniform() < self.p:
             theta = self.rng.uniform(self.rotation[0], self.rotation[-1])
             if self.rng.uniform() < 0.5:
                 theta = -1.0 * theta
@@ -219,20 +234,20 @@ class DiscriminatorDataTransform:
                 compressed_kspace, compute_uv=True, full_matrices=False
             )
             # Multiply kspace by the complex conjugate of the first
-            # self.num_compressed_coils left vectors.
+            # self.coil_compression left vectors.
             compressed_kspace = np.reshape(
                 np.array(np.matmul(
-                    np.matrix(u[:, :self.num_compressed_coils]).H,
+                    np.matrix(u[:, :self.coil_compression].copy()).H,
                     compressed_kspace
                 )),
-                (self.num_compressed_coils, h, w)
+                (self.coil_compression, h, w)
             )
             compressed_distorted = np.reshape(
                 np.array(np.matmul(
-                    np.matrix(u[:, :self.num_compressed_coils]).H,
+                    np.matrix(u[:, :self.coil_compression].copy()).H,
                     compressed_distorted
                 )),
-                (self.num_compressed_coils, h, w)
+                (self.coil_compression, h, w)
             )
             compressed_kspace = T.to_tensor(compressed_kspace)
             compressed_distorted = T.to_tensor(compressed_distorted)
@@ -274,16 +289,47 @@ class DiscriminatorDataTransform:
         # possibility of reacquiring the same lines, since this may happen
         # in practice.
         _, _, w, _ = kspace_shape
-        lines_acquired = max(min(lines_acquired, w), 0)
-        lines_acquiring = max(min(lines_acquiring, w), 0)
+        # For training MLP discriminators, can just treat the center lines
+        # as ground truth and everything else as distorted.
+        if self.is_mlp:
+            num_center_lines = int(w * self.center_frac)
+            l_center = (w - num_center_lines) // 2
+            r_center = l_center + num_center_lines
+            lines_acquired = np.arange(l_center, r_center)
+            lines_acquiring = np.concatenate(
+                (np.arange(0, l_center), np.arange(r_center, w),)
+            )
+            if not self.inference:
+                lines_acquiring = np.array([self.rng.choice(lines_acquiring)])
+            else:
+                # Set the possible range of acceleration factors.
+                acceleration_factors = [4.0, 8.0]
+                # Set the number of lines to test.
+                num_lines_acquiring = 12
+                fixed_acceleration = self.rng.choice(acceleration_factors)
+                num_hf_lines_acquired = int(max(
+                    0, (w // fixed_acceleration) - (r_center - l_center)
+                ))
+                hf_lines = self.rng.choice(
+                    lines_acquiring,
+                    size=(num_hf_lines_acquired + num_lines_acquiring),
+                    replace=False
+                )
+                lines_acquiring = hf_lines[:num_lines_acquiring]
+                lines_acquired = np.concatenate(
+                    (lines_acquired, hf_lines[num_lines_acquiring:],)
+                )
+        else:
+            lines_acquired = max(min(lines_acquired, w), 0)
+            lines_acquiring = max(min(lines_acquiring, w), 0)
 
-        # Get the index of the acquired and acquiring lines.
-        lines_acquired = self.rng.choice(
-            np.arange(0, w, dtype=int), size=lines_acquired, replace=False
-        )
-        lines_acquiring = self.rng.choice(
-            np.arange(0, w, dtype=int), size=lines_acquiring, replace=False
-        )
+            # Get the index of the acquired and acquiring lines.
+            lines_acquired = self.rng.choice(
+                np.arange(0, w, dtype=int), size=lines_acquired, replace=False
+            )
+            lines_acquiring = self.rng.choice(
+                np.arange(0, w, dtype=int), size=lines_acquiring, replace=False
+            )
 
         # Convert from indices to actual 1D masks.
         acquired_mask = np.where(

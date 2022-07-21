@@ -96,6 +96,10 @@ class ReconstructorDataset(Dataset):
         self.fns = None
         if len(self.data) > 0:
             print(f"Using data cache file {self.dataset_cache_file}.")
+            data_basenames = []
+            for x in self.data:
+                data_basenames.append((str(os.path.basename(x[0])),) + x[1:])
+            self.data = data_basenames
         else:
             if os.path.isdir(self.data_path):
                 data = os.listdir(self.data_path)
@@ -120,9 +124,12 @@ class ReconstructorDataset(Dataset):
 
             if not self.fast_dev_run and os.path.isdir(self.data_path):
                 cache[os.path.basename(self.data_path)] = self.data
-                with open(cache_path, "w+b") as f:
+                with open(self.dataset_cache_file, "w+b") as f:
                     pickle.dump(cache, f)
-                print(f"Saved dataset cache to {os.path.abspath(cache_path)}.")
+                print(
+                    "Saved dataset cache to",
+                    f"{os.path.abspath(self.dataset_cache_file)}."
+                )
         self.rng.shuffle(self.data)
 
         if num_gpus > 1:

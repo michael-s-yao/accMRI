@@ -37,10 +37,23 @@ class Main:
             action="store_true",
             help="Explicitly specify whether to use multicoil data."
         )
+        model_choices = (
+            "NormUNet", "normunet", "UNet", "unet", "MLP", "mlp", "CNN", "cnn"
+        )
+        model_help = "Model for discriminator, one of "
+        model_help += "[`normunet`, `unet`, `mlp`, `cnn`]."
+        parser.add_argument(
+            "--model",
+            type=str,
+            choices=model_choices,
+            default="mlp",
+            help=model_help
+        )
         parser.add_argument(
             "--rotation",
             type=float,
             default=[10.0, 15.0],
+            nargs=2,
             help="Rotation magnitude range (in degrees). Default 10 to 15 deg."
         )
         parser.add_argument(
@@ -123,14 +136,14 @@ class Main:
         parser.add_argument(
             "--lr_step_size",
             type=int,
-            default=40,
-            help="Learning rate step size. Default 40."
+            default=50,
+            help="Learning rate step size. Default 50."
         )
         parser.add_argument(
             "--lr_gamma",
             type=float,
-            default=0.1,
-            help="Learning rate decay rate. Default 0.1."
+            default=1.0,
+            help="Learning rate decay rate. Default no decay."
         )
         parser.add_argument(
             "--weight_decay",
@@ -152,14 +165,14 @@ class Main:
         parser.add_argument(
             "--chans",
             type=int,
-            default=18,
-            help="Number of channels for discriminator UNet. Default 18."
+            default=128,
+            help="Number of channels in first hidden layer. Default 128."
         )
         parser.add_argument(
             "--pools",
             type=int,
-            default=4,
-            help="Number of UNet down- and up- sampling layers. Default 4"
+            default=8,
+            help="Number of UNet down- and up- sampling layers. Default 8."
         )
         parser.add_argument(
             "--mode",
@@ -179,6 +192,13 @@ class Main:
             type=str,
             default=None,
             help="Optional path to checkpoint to resume training from."
+        )
+        parser.add_argument(
+            "--center_crop",
+            type=int,
+            nargs=2,
+            default=(-1, -1),
+            help="kspace center crop dimensions. Default no center crop."
         )
 
         return parser.parse_args()
@@ -236,6 +256,11 @@ class Inference:
             default=[320, 320],
             nargs=2,
             help="kspace crop size. Default (320, 320) (fastMRI default)."
+        )
+        parser.add_argument(
+            "--histogram",
+            action="store_true",
+            help="Generates heatmap value histogram in cwd."
         )
 
         return parser.parse_args()

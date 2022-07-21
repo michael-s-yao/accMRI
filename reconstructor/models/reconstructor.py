@@ -31,6 +31,7 @@ class Reconstructor(nn.Module):
         sens_pools: int = 4,
         sens_drop_prob: float = 0.0,
         mask_center: bool = True,
+        use_zero_filled: bool = False,
         **kwargs
     ):
         """
@@ -43,12 +44,15 @@ class Reconstructor(nn.Module):
             sens_drop_prob: dropout probability for sensitivity map UNet.
             mask_center: whether to mask center of kspace during sensitivity
                 map calculation.
+            use_zero_filled: use zero-filled baseline reconstructor.
         """
         super().__init__()
 
         self.is_multicoil = is_multicoil
 
-        if model.lower() == "varnet":
+        if use_zero_filled:
+            self.model = None
+        elif model.lower() == "varnet":
             self.model = VarNet(is_multicoil=self.is_multicoil, **kwargs)
         elif model.lower() == "unet":
             self.model = UNet(**kwargs)
@@ -57,7 +61,7 @@ class Reconstructor(nn.Module):
 
         # Include a sensitivity estimation module if multicoil input.
         self.sens_net = None
-        if self.is_multicoil:
+        if self.is_multicoil and not use_zero_filled:
             self.sens_net = SensitivityModel(
                 init_conv_chans=sens_chans,
                 num_pool_layers=sens_pools,
@@ -81,6 +85,9 @@ class Reconstructor(nn.Module):
         Returns:
             Estimated image reconstruction of estimated full kspace data.
         """
+        # Return the zero-filled reconstruction if self.model is None.
+        if self.model is None:
+            return rss(complex_abs(ifft2c(masked_kspace)), dim=1)
 
         # Calculate coil sensitivity maps.
         sens_maps = None
@@ -88,7 +95,7 @@ class Reconstructor(nn.Module):
             sens_maps = self.sens_net(masked_kspace, mask, center_mask)
 
         if isinstance(self.model, VarNet):
-            return self.model(masked_kspace, mask, center_mask, sens_maps)
+            return self.model(masked_kspace, mask, sens_maps)
         elif isinstance(self.model, UNet):
             # Start with zero-filled reconstruction.
             if self.is_multicoil:

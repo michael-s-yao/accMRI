@@ -45,6 +45,7 @@ class Main:
         parser.add_argument(
             "--fixed_acceleration",
             type=float,
+            nargs="+",
             default=None,
             help="Optional fixed acceleration factor for training."
         )
@@ -172,6 +173,17 @@ class Main:
             default=None,
             help="Optional path to checkpoint to resume training from."
         )
+        parser.add_argument(
+            "--tl",
+            action="store_true",
+            help="Transfer learning pre-training using Shepp-Logan phantoms."
+        )
+        parser.add_argument(
+            "--num_coils",
+            type=int,
+            default=15,
+            help="Number of coils to simulate for Shepp-Logan phantoms."
+        )
 
         return parser.parse_args()
 
@@ -182,46 +194,52 @@ class Inference:
         parser = argparse.ArgumentParser(description="MRI Image Reconstructor")
 
         parser.add_argument(
-            "data_path",
+            "--data_path",
             type=str,
+            required=True,
             help="A file or folder of undersampled kspace data."
         )
         parser.add_argument(
-            "--lightning_logs",
+            "--cache_path",
             type=str,
-            default="./lightning_logs",
-            help="A path to the reconstructor lightning logs."
+            default="./dataset_cache.pkl",
+            help="Optional dataset cache file to use for faster load times."
+        )
+        # Per Yin T, Wu Z, et al, we can optionally choose to crop our
+        # reconstruction to a smaller size, like (128, 128,) for instance.
+        parser.add_argument(
+            "--center_crop",
+            type=int,
+            default=[256, 256],
+            nargs=2,
+            help="kspace crop size. Default (256, 256)."
         )
         parser.add_argument(
-            "--model_option",
-            type=int,
-            default="-1",
-            help="Reconstructor option choice (avoids interactive input)."
+            "--model",
+            type=str,
+            default=None,
+            help="Model checkpoint file. Default zero-filled reconstructor."
+        )
+        parser.add_argument(
+            "--simulated",
+            action="store_true",
+            help="Run inference on simulated phantom slices."
+        )
+        fixed_acceleration_help = "Acceleration factor(s) to use for "
+        fixed_acceleration_help += "inference. Only applies for non-test "
+        fixed_acceleration_help += "datasets. Default variable acceleration."
+        parser.add_argument(
+            "--fixed_acceleration",
+            type=float,
+            nargs="+",
+            default=None,
+            help=fixed_acceleration_help
         )
         parser.add_argument(
             "--save_path",
             type=str,
             default=None,
-            help="Save path for image reconstructions from input dataset."
-        )
-        parser.add_argument(
-            "--use_zero_filled",
-            action="store_true",
-            help="Use zero-filled baseline reconstructor."
-        )
-        parser.add_argument(
-            "--use_fair",
-            action="store_true",
-            help="Use E2EVarNet fastMRI model from Sriram et al (2020)."
-        )
-        fixed_acceleration_help = "Acceleration factor to use for inference. "
-        fixed_acceleration_help += "Only applies for non-test datasets. "
-        fixed_acceleration_help += "Default variable acceleration."
-        parser.add_argument(
-            "--fixed_acceleration",
-            type=float,
-            default=None,
-            help=fixed_acceleration_help
+            help="Path to save image reconstructions to. Default None."
         )
 
         return parser.parse_args()

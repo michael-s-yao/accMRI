@@ -31,7 +31,7 @@ class VarNet(nn.Module):
 
     def __init__(
         self,
-        num_cascades: int = 12,
+        num_cascades: int = 8,
         chans: int = 18,
         pools: int = 4,
         is_multicoil: bool = False
@@ -63,17 +63,14 @@ class VarNet(nn.Module):
         self,
         masked_kspace: torch.Tensor,
         mask: torch.Tensor,
-        center_mask: Optional[torch.Tensor] = None,
         sens_maps: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
         """
-        Estimates coil sensitivity maps and samples addition kspace data, and
-        then estimates the rest of kspace and returns the final estimated
-        image reconstruction.
+        Estimates coil sensitivity maps and the rest of unsampled kspace,
+        and returns the final estimated image reconstruction.
         Input:
             masked_kspace: currently acquired kspace data.
             mask: acquisition mask of acquired kspace data.
-            center_mask: mask of acquired center low-frequency kspace data.
             sens_maps: estimated sensitivity maps.
         Returns:
             Estimated image reconstruction of estimated full kspace data.

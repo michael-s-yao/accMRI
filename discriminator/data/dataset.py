@@ -53,7 +53,10 @@ class DiscriminatorDataset(Dataset):
         seed: Optional[int] = None,
         fast_dev_run: bool = False,
         num_gpus: int = 0,
-        dataset_cache_file: Optional[str] = None
+        dataset_cache_file: Optional[str] = None,
+        is_mlp: bool = True,
+        split: Optional[str] = None,
+        center_crop: Optional[Tuple[int]] = (-1, -1)
     ):
         """
         Args:
@@ -64,6 +67,10 @@ class DiscriminatorDataset(Dataset):
             num_gpus: number of GPUs used for training.
             dataset_cache_file: optional dataset cache file to use for faster
                 load times.
+            is_mlp: specify whether discriminator is an MLP network.
+            split: specify whether dataset is for validation or testing. Only
+                required if is_mlp is True.
+            center_crop: kspace center crop dimensions. Default no center crop.
         """
         super().__init__()
         self.transform = transform
@@ -71,6 +78,7 @@ class DiscriminatorDataset(Dataset):
         self.rng = np.random.RandomState(seed)
         self.data_path = data_path
         self.dataset_cache_file = dataset_cache_file
+        self.center_crop = center_crop
         if self.dataset_cache_file is None:
             if "multicoil" in data_path.lower():
                 cache_path = "multicoil_"
@@ -123,12 +131,19 @@ class DiscriminatorDataset(Dataset):
 
             if not self.fast_dev_run and os.path.isdir(self.data_path):
                 cache[os.path.basename(self.data_path)] = self.data
-                with open(dataset_cache_file, "w+b") as f:
+                with open(self.dataset_cache_file, "w+b") as f:
                     pickle.dump(cache, f)
                 print(
                     "Saved dataset cache to",
-                    f"{os.path.abspath(dataset_cache_file)}."
+                    f"{os.path.abspath(self.dataset_cache_file)}."
                 )
+        # For MLP training, split the validation dataset into half for
+        # validation and half for testing.
+        mid = len(self.data) // 2
+        if is_mlp and split is not None and split.lower() == "val":
+            self.data[:mid]
+        elif is_mlp and split is not None:
+            self.data[mid:]
         self.rng.shuffle(self.data)
 
         if num_gpus > 1:
@@ -153,8 +168,7 @@ class DiscriminatorDataset(Dataset):
         Input:
             idx: index of desired dataset.
         Returns:
-            A VarNetSample object (for training and validation datasets) or
-            a TestSample object (for test datasets).
+            A DiscriminatorSample object.
         """
         fn, slice_idx, metadata = self.data[idx]
         with h5py.File(os.path.join(self.data_path, fn), "r") as hf:
@@ -162,6 +176,10 @@ class DiscriminatorDataset(Dataset):
             # Add a coil dimension for single coil data.
             if kspace.ndim < 4:
                 kspace = torch.unsqueeze(kspace, dim=0)
+            if self.center_crop[0] > 0 and self.center_crop[-1] > 0:
+                kspace = torch.permute(kspace, dims=(0, -1, 1, 2))
+                kspace = T.center_crop(kspace, self.center_crop)
+                kspace = torch.permute(kspace, dims=(0, 2, 3, 1))
             # Update metadata with any additional data associated with file.
             metadata.update(dict(hf.attrs))
 

@@ -12,6 +12,8 @@ import pytorch_lightning as pl
 import sys
 import torch
 import torch.nn as nn
+from typing import Optional, Tuple
+
 from torchmetrics.metric import Metric
 from models.discriminator import Discriminator
 
@@ -31,6 +33,8 @@ class DiscriminatorModule(pl.LightningModule):
         lr_step_size: int = 40,
         lr_gamma: float = 0.1,
         weight_decay: float = 0.0,
+        model: str = "cnn",
+        center_crop: Optional[Tuple[int]] = (-1, -1)
     ):
         """
         Args:
@@ -42,6 +46,9 @@ class DiscriminatorModule(pl.LightningModule):
             lr_step_size: learning rate step size.
             lr_gamma: learning rate gamma decay.
             weight_decay: parameter for penalizing weights norm.
+            model: model for discriminator, one of [`normunet`, `unet`, `mlp`,
+                `cnn`].
+            center_crop: kspace center crop dimensions. Default no center crop.
         """
         super().__init__()
         self.save_hyperparameters()
@@ -53,14 +60,24 @@ class DiscriminatorModule(pl.LightningModule):
         self.lr_step_size = lr_step_size
         self.lr_gamma = lr_gamma
         self.weight_decay = weight_decay
+        # Default fastMRI dataset dimension.
+        self.h = 640
+        if center_crop[0] > 0:
+            self.h = center_crop[0]
 
-        self.unet = Discriminator(
+        # The factor of 2 comes from both acquired and acquiring kspace
+        # line samples.
+        in_chans = 2 * self.h * self.num_coils
+        self.model = Discriminator(
             num_coils=self.num_coils,
             chans=self.chans,
             pools=self.pools,
+            model=model,
+            in_chans=in_chans,
+            out_chans=1,
         )
 
-        self.loss = nn.BCELoss()
+        self.loss = nn.BCEWithLogitsLoss()
         self.ValLoss = DistributedMetricSum()
         self.TotSliceExamples = DistributedMetricSum()
 
@@ -68,6 +85,8 @@ class DiscriminatorModule(pl.LightningModule):
         self,
         acquired_kspace: torch.Tensor,
         acquiring_kspace: torch.Tensor,
+        acquired_mask: torch.Tensor,
+        acquiring_mask: torch.Tensor
     ) -> torch.Tensor:
         """
         Generates a heat map of kspace fidelity.
@@ -76,16 +95,22 @@ class DiscriminatorModule(pl.LightningModule):
                 shape BCWH2.
             acquiring_kspace: currenty masked kspace data acquisition of
                 unknown fidelity of shape BCHW2.
+            acquired_mask: acquired data mask of shape BW.
+            acquiring_mask: current step acquisition data mask of shape BW.
         Returns:
             Heat map of kspace fidelity of shape BHW. All values are between
             0.0 and 1.0. Values closer to 1.0 have lower fidelity.
         """
-        return self.unet(acquired_kspace, acquiring_kspace)
+        return self.model(
+            acquired_kspace, acquiring_kspace, acquired_mask, acquiring_mask
+        )
 
     def training_step(self, batch, batch_idx):
         acquired = T.apply_mask(batch.ref_kspace, batch.sampled_mask)
         acquiring = T.apply_mask(batch.distorted_kspace, batch.acquiring_mask)
-        heatmap = self(acquired, acquiring)
+        heatmap = self(
+            acquired, acquiring, batch.sampled_mask, batch.acquiring_mask
+        )
         ground_truth = 1.0 - torch.isclose(
             batch.ref_kspace, batch.distorted_kspace
         ).type(torch.float32)
@@ -96,48 +121,19 @@ class DiscriminatorModule(pl.LightningModule):
         idxs = torch.nonzero(batch.acquiring_mask > 0.0, as_tuple=True)
 
         loss = self.loss(
-            heatmap[idxs[0], :, idxs[1]].T,
-            ground_truth[idxs[0], :, idxs[1]].T
+            torch.mean(heatmap[idxs[0], :, idxs[1]].T, dim=0),
+            torch.mean(ground_truth[idxs[0], :, idxs[1]].T, dim=0)
         )
         self.log("train_loss", loss)
-
-        if batch_idx % 100 == 0 + 100:
-            self.log_image(
-                "heatmap", (255.0 * heatmap[0]).type(torch.uint8), cmap="magma"
-            )
-            self.log_image("gt", (ground_truth[0] * 255.0).type(torch.uint8))
-            b, h, w = heatmap.size()
-            mask = torch.cat(
-                (torch.unsqueeze(batch.acquiring_mask[0], dim=0),) * h, dim=0
-            )
-            self.log_image("acquiringmask", (255.0 * mask).type(torch.uint8))
-            self.log_image(
-                "acquiredkspacemasked",
-                torch.sum(acquired[0], dim=(0, -1)),
-                cmap="gray"
-            )
-            self.log_image(
-                "acquiringkspacemasked",
-                torch.sum(acquiring[0], dim=(0, -1)),
-                cmap="gray"
-            )
-            self.log_image(
-                "acquiredkspace",
-                torch.sum(batch.ref_kspace[0], dim=(0, -1)),
-                cmap="gray"
-            )
-            self.log_image(
-                "acquiring",
-                torch.sum(batch.distorted_kspace[0], dim=(0, -1)),
-                cmap="gray"
-            )
 
         return loss
 
     def validation_step(self, batch, batch_idx):
         acquired = T.apply_mask(batch.ref_kspace, batch.sampled_mask)
         acquiring = T.apply_mask(batch.distorted_kspace, batch.acquiring_mask)
-        heatmap = self(acquired, acquiring)
+        heatmap = self(
+            acquired, acquiring, batch.sampled_mask, batch.acquiring_mask
+        )
         ground_truth = 1.0 - torch.isclose(
             batch.ref_kspace, batch.distorted_kspace
         ).type(torch.float32)
@@ -153,8 +149,8 @@ class DiscriminatorModule(pl.LightningModule):
             "slice_num": batch.slice_idx,
             "heatmap": T.apply_mask(heatmap, batch.acquiring_mask),
             "val_loss": self.loss(
-                heatmap[idxs[0], :, idxs[1]].T,
-                ground_truth[idxs[0], :, idxs[1]].T
+                torch.mean(heatmap[idxs[0], :, idxs[1]].T, dim=0),
+                torch.mean(ground_truth[idxs[0], :, idxs[1]].T, dim=0)
             )
         }
 
@@ -179,7 +175,9 @@ class DiscriminatorModule(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         acquired = T.apply_mask(batch.ref_kspace, batch.sampled_mask)
         acquiring = T.apply_mask(batch.distorted_kspace, batch.acquiring_mask)
-        heatmap = self(acquired, acquiring)
+        heatmap = self(
+            acquired, acquiring, batch.sampled_mask, batch.acquiring_mask
+        )
         ground_truth = 1.0 - torch.isclose(
             batch.ref_kspace, batch.distorted_kspace
         ).type(torch.float32)

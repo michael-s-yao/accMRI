@@ -25,8 +25,9 @@ class ConvBlock(nn.Module):
         self,
         in_chans: int,
         out_chans: int,
-        drop_prob: float,
-        num_conv_layers: Optional[int] = 2,
+        drop_prob: float = 0.0,
+        num_conv_layers: int = 2,
+        pool_kernel: Optional[int] = -1,
     ):
         """
         Args:
@@ -34,6 +35,7 @@ class ConvBlock(nn.Module):
             out_chans: number of output channels.
             drop_prob: dropout probability.
             num_conv_layers: number of convolution layers.
+            pool_kernel: optional max pooling kernel size. Default no pooling.
         """
         super().__init__()
 
@@ -41,6 +43,7 @@ class ConvBlock(nn.Module):
         self.out_chans = out_chans
         self.drop_prob = drop_prob
         self.num_conv_layers = num_conv_layers
+        self.pool_kernel = pool_kernel
 
         sequence = []
         for i in range(num_conv_layers):
@@ -63,6 +66,17 @@ class ConvBlock(nn.Module):
             sequence.append(
                 ("normalization" + str(i), nn.InstanceNorm2d(self.out_chans),)
             )
+            if self.pool_kernel > -1:
+                sequence.append(
+                    (
+                        "pooling" + str(i),
+                        nn.AvgPool2d(
+                            kernel_size=(self.pool_kernel, 1),
+                            padding=(1, 0),
+                            stride=2
+                        )
+                    )
+                )
             sequence.append(
                 (
                     "activation" + str(i),

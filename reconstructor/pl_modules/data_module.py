@@ -12,8 +12,9 @@ from pathlib import Path
 import pytorch_lightning as pl
 import sys
 import torch
-from typing import Optional, Union
+from typing import Optional, Sequence, Union
 from data.dataset import ReconstructorDataset, ReconstructorSample
+from data.sldataset import SheppLoganDataset
 from data.transform import ReconstructorDataTransform
 
 sys.path.append("..")
@@ -25,18 +26,21 @@ class DataModule(pl.LightningDataModule):
 
     def __init__(
         self,
-        data_path: Union[Path, str],
+        data_path: Union[Path, str] = "",
         cache_path: Optional[str] = None,
         train_dir: str = "multicoil_train",
         val_dir: str = "multicoil_val",
         test_dir: str = "multicoil_test",
         batch_size: int = 1,
         center_crop: Union[torch.Size, tuple] = (640, 368,),
-        fixed_acceleration: Optional[float] = None,
+        fixed_acceleration: Optional[Sequence[float]] = None,
         num_workers: int = 4,
         seed: Optional[int] = None,
         fast_dev_run: bool = False,
         num_gpus: int = 0,
+        tl: bool = False,
+        num_slices_per_phantom: Optional[int] = 40,
+        num_coils: Optional[int] = 4,
     ):
         """
         Args:
@@ -56,6 +60,12 @@ class DataModule(pl.LightningDataModule):
             seed: optional random seed for determining order of dataset.
             fast_dev_run: whether we are running a test fast_dev_run.
             num_gpus: number of GPUs in use.
+            tl: specify transfer learning pre-training using Shepp-Logan
+                phantoms.
+            num_slices_per_phantom: if using phantom data, specify number of
+                slices to take per 3D simulated phantom.
+            num_coils: if using phantom data, specify number of coils to
+                simulate.
         """
         super().__init__()
 
@@ -63,15 +73,34 @@ class DataModule(pl.LightningDataModule):
         self.root_path = Path(self.data_path)
         self.batch_size = batch_size
         self.num_workers = num_workers
+        # Sizes for transfer learning set arbitrarily to be the same as the
+        # number of slices in the original fastMRI dataset.
+        self.fastMRI_size = {
+            "train": 70_748, "val": 21_842, "test": 8_852
+        }
 
         # If all of train_dir, val_dir, and test_dir are None, then we are
         # predicting reconstructions.
         if train_dir is None and val_dir is None and test_dir is None:
+            if tl:
+                self.predict = SheppLoganDataset(
+                    num_samples=self.fastMRI_size["test"],
+                    num_slices=num_slices_per_phantom,
+                    num_coils=num_coils,
+                    center_fractions=[0.08, 0.04],
+                    fixed_accelerations=fixed_acceleration,
+                    slice_size=center_crop,
+                    min_lines_acquired=16,
+                    seed=(seed + sum([ord(c) for c in "predict"]))
+                )
+                return
             multicoil = "multicoil" in data_path.lower()
             self.predict = ReconstructorDataset(
                 self.data_path,
                 ReconstructorDataTransform(
+                    center_fractions=[0.08, 0.04],
                     center_crop=center_crop,
+                    fixed_acceleration=fixed_acceleration,
                     seed=seed,
                 ),
                 seed=seed,
@@ -80,48 +109,84 @@ class DataModule(pl.LightningDataModule):
             return
 
         multicoil = "multicoil" in train_dir.lower()
-        self.train = ReconstructorDataset(
-            str(os.path.join(self.data_path, train_dir)),
-            ReconstructorDataTransform(
+        if tl:
+            self.train = SheppLoganDataset(
+                num_samples=self.fastMRI_size["train"],
+                num_slices=num_slices_per_phantom,
+                num_coils=num_coils,
                 center_fractions=[0.08, 0.04],
-                center_crop=center_crop,
-                fixed_acceleration=fixed_acceleration,
+                fixed_accelerations=fixed_acceleration,
+                slice_size=center_crop,
                 min_lines_acquired=16,
-                seed=seed
-            ),
-            seed=seed,
-            fast_dev_run=fast_dev_run,
-            multicoil=multicoil,
-            num_gpus=num_gpus,
-            dataset_cache_file=cache_path
-        )
-        self.val = ReconstructorDataset(
-            str(os.path.join(self.data_path, val_dir)),
-            ReconstructorDataTransform(
+                seed=(seed + sum([ord(c) for c in "train"]))
+            )
+        else:
+            self.train = ReconstructorDataset(
+                str(os.path.join(self.data_path, train_dir)),
+                ReconstructorDataTransform(
+                    center_fractions=[0.08, 0.04],
+                    center_crop=center_crop,
+                    fixed_acceleration=fixed_acceleration,
+                    min_lines_acquired=16,
+                    seed=seed
+                ),
+                seed=seed,
+                fast_dev_run=fast_dev_run,
+                multicoil=multicoil,
+                num_gpus=num_gpus,
+                dataset_cache_file=cache_path
+            )
+        if tl:
+            self.val = SheppLoganDataset(
+                num_samples=self.fastMRI_size["val"],
+                num_slices=num_slices_per_phantom,
+                num_coils=num_coils,
                 center_fractions=[0.08, 0.04],
-                center_crop=center_crop,
-                fixed_acceleration=fixed_acceleration,
+                fixed_accelerations=fixed_acceleration,
+                slice_size=center_crop,
                 min_lines_acquired=16,
+                seed=(seed + sum([ord(c) for c in "val"]))
+            )
+        else:
+            self.val = ReconstructorDataset(
+                str(os.path.join(self.data_path, val_dir)),
+                ReconstructorDataTransform(
+                    center_fractions=[0.08, 0.04],
+                    center_crop=center_crop,
+                    fixed_acceleration=fixed_acceleration,
+                    min_lines_acquired=16,
+                    seed=seed,
+                ),
                 seed=seed,
-            ),
-            seed=seed,
-            fast_dev_run=fast_dev_run,
-            multicoil=multicoil,
-            num_gpus=num_gpus,
-            dataset_cache_file=cache_path
-        )
-        self.test = ReconstructorDataset(
-            str(os.path.join(self.data_path, test_dir)),
-            ReconstructorDataTransform(
-                center_crop=center_crop,
+                fast_dev_run=fast_dev_run,
+                multicoil=multicoil,
+                num_gpus=num_gpus,
+                dataset_cache_file=cache_path
+            )
+        if tl:
+            self.test = SheppLoganDataset(
+                num_samples=self.fastMRI_size["test"],
+                num_slices=num_slices_per_phantom,
+                num_coils=num_coils,
+                center_fractions=[0.08, 0.04],
+                fixed_accelerations=fixed_acceleration,
+                slice_size=center_crop,
+                min_lines_acquired=16,
+                seed=(seed + sum([ord(c) for c in "test"]))
+            )
+        else:
+            self.test = ReconstructorDataset(
+                str(os.path.join(self.data_path, test_dir)),
+                ReconstructorDataTransform(
+                    center_crop=center_crop,
+                    seed=seed,
+                ),
                 seed=seed,
-            ),
-            seed=seed,
-            fast_dev_run=fast_dev_run,
-            multicoil=multicoil,
-            num_gpus=num_gpus,
-            dataset_cache_file=cache_path
-        )
+                fast_dev_run=fast_dev_run,
+                multicoil=multicoil,
+                num_gpus=num_gpus,
+                dataset_cache_file=cache_path
+            )
         self.predict = None
 
     def train_dataloader(self):
