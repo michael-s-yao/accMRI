@@ -40,7 +40,7 @@ class Main:
             type=int,
             default=[320, 320],
             nargs=2,
-            help="kspace crop size. Default (320, 320) (fastMRI default)."
+            help="Image crop size. Default (320, 320) (fastMRI default)."
         )
         parser.add_argument(
             "--fixed_acceleration",
@@ -184,6 +184,15 @@ class Main:
             default=15,
             help="Number of coils to simulate for Shepp-Logan phantoms."
         )
+        ewc_help = "Elastic weight consolidation (EWC) loss scaling. "
+        ewc_help += "Default no EWC."
+        parser.add_argument("--ewc", type=float, default=0.0, help=ewc_help)
+        ewc_statedict_help = "Path to checkpoint file that contains the "
+        ewc_statedict_help += "state dict from the first learning task. "
+        ewc_statedict_help += "Used for learning multiple anatomies."
+        parser.add_argument(
+            "--ewc_state_dict", type=str, default=None, help=ewc_statedict_help
+        )
 
         return parser.parse_args()
 
@@ -212,7 +221,7 @@ class Inference:
             type=int,
             default=[256, 256],
             nargs=2,
-            help="kspace crop size. Default (256, 256)."
+            help="Image crop size. Default (256, 256)."
         )
         parser.add_argument(
             "--model",

@@ -50,6 +50,9 @@ def main():
         tl=args.tl,
         num_coils=args.num_coils,
     )
+    ewc_dataloader = None
+    if args.ewc > 0.0:
+        ewc_dataloader = datamodule.train_dataloader()
     model = ReconstructorModule(
         model=args.model,
         is_multicoil=args.multicoil,
@@ -64,7 +67,10 @@ def main():
         lr_gamma=args.lr_gamma,
         weight_decay=args.weight_decay,
         num_log_images=args.num_log_images,
-        save_reconstructions=args.save_reconstructions
+        save_reconstructions=args.save_reconstructions,
+        ewc=args.ewc,
+        ewc_dataloader=ewc_dataloader,
+        ewc_state_dict=args.ewc_state_dict
     )
     log_every_n_steps = 1 if args.fast_dev_run else 50
     start = str(int(time.time()))

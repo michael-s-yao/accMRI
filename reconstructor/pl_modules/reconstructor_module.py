@@ -6,16 +6,17 @@ Author(s):
 
 Licensed under the MIT License.
 """
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 import pathlib
 import numpy as np
 import sys
 import torch
+from pathlib import Path
 import pytorch_lightning as pl
-from typing import Optional
+from typing import Optional, Union
 from torchmetrics.metric import Metric
 from models.reconstructor import Reconstructor
-from models.loss import SSIMLoss
+from models.loss import SSIMLoss, EWCLoss
 
 sys.path.append("..")
 from helper.utils.evaluate import mse, ssim, save_reconstructions
@@ -42,6 +43,9 @@ class ReconstructorModule(pl.LightningModule):
         num_log_images: int = 16,
         save_reconstructions: bool = False,
         use_zero_filled: bool = False,
+        ewc: Optional[float] = 0.0,
+        ewc_dataloader: Optional[torch.utils.data.DataLoader] = None,
+        ewc_state_dict: Optional[Union[Path, str]] = None
     ):
         """
         Args:
@@ -63,6 +67,12 @@ class ReconstructorModule(pl.LightningModule):
             save_reconstructions: whether to save the image reconstructions
                 from the test dataset.
             use_zero_filled: use zero-filled baseline reconstructor.
+            ewc: elastic weight consolidation (EWC) loss scaling. Default no
+                EWC.
+            ewc_dataloader: dataloader for FIM calculation as part of EWC
+                regularization.
+            ewc_state_dict: path to checkpoint file from first learning task
+                in sequential learning. Default None.
         """
         super().__init__()
         self.save_hyperparameters()
@@ -101,7 +111,28 @@ class ReconstructorModule(pl.LightningModule):
             use_zero_filled=use_zero_filled,
         )
 
+        if ewc > 0.0 and ewc_state_dict is not None:
+            state_dict = torch.load(ewc_state_dict)["state_dict"]
+            updt_state_dict = OrderedDict()
+            for k in state_dict.keys():
+                updt_k = k.split(".")
+                if "reconstructor" == updt_k[0]:
+                    updt_k = ".".join(updt_k[1:])
+                else:
+                    continue
+                updt_state_dict[updt_k] = state_dict[k]
+            self.reconstructor.load_state_dict(updt_state_dict)
+
         self.loss = SSIMLoss()
+        if ewc > 0.0:
+            self.ewc_loss = EWCLoss(
+                model=self.reconstructor,
+                dataloader=ewc_dataloader,
+                lambda_=ewc,
+                fim_cache_path="./knee_multicoil_fim.pkl"
+            )
+        else:
+            self.ewc_loss = None
 
     def forward(
         self,
@@ -129,10 +160,13 @@ class ReconstructorModule(pl.LightningModule):
             ),
             data_range=batch.max_value
         )
+        if self.ewc_loss is not None:
+            regularizer_loss = self.ewc_loss(self.reconstructor)
 
         self.log("train_loss", loss)
+        self.log("regularization_loss", regularizer_loss)
 
-        return loss
+        return loss + regularizer_loss
 
     def validation_step(self, batch, batch_idx):
         output = self(batch.masked_kspace, batch.mask, batch.center_mask)
@@ -144,6 +178,8 @@ class ReconstructorModule(pl.LightningModule):
             torch.unsqueeze(target, dim=1),
             data_range=batch.max_value
         )
+        if self.ewc_loss is not None:
+            val_loss += self.ewc_loss(self.reconstructor)
 
         self.log("mask", batch.mask, batch_size=batch.masked_kspace.size()[0])
         self.log(
