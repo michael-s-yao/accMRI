@@ -110,6 +110,7 @@ class DiscriminatorDataTransform:
         metadata: dict,
         fn: str,
         slice_idx: int,
+        targ: Optional[torch.Tensor] = None,
     ) -> DiscriminatorSample:
         """
         Generate a kspace mask and apply it on the training kspace data.
@@ -118,6 +119,7 @@ class DiscriminatorDataTransform:
             metadata: metadata associated with dataset.
             fn: name of the original data file.
             slice_idx: index of slice from original dataset.
+            targ: optional target image. Used only for inference.
         Returns:
             A DiscriminatorSample object.
         """
@@ -252,6 +254,11 @@ class DiscriminatorDataTransform:
             compressed_kspace = T.to_tensor(compressed_kspace)
             compressed_distorted = T.to_tensor(compressed_distorted)
 
+        if targ is not None:
+            max_value = metadata["max"]
+        else:
+            max_value = 0.0
+
         return DiscriminatorSample(
             compressed_kspace,
             compressed_distorted,
@@ -264,7 +271,9 @@ class DiscriminatorDataTransform:
             fn,
             slice_idx,
             kspace,
-            distorted_kspace
+            distorted_kspace,
+            targ,
+            max_value
         )
 
     def masks(

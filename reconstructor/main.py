@@ -9,8 +9,9 @@ Licensed under the MIT License.
 from args import Main
 import os
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks import ModelCheckpoint, TQDMProgressBar
 import time
+
 from pl_modules.data_module import DataModule
 from pl_modules.reconstructor_module import ReconstructorModule
 
@@ -81,17 +82,17 @@ def main():
         monitor="validation_loss",
         save_last=True
     )
+    progbar_refresh_rate = 100
+    progressbar_callback = TQDMProgressBar(refresh_rate=progbar_refresh_rate)
     # Will use GPUs automatically if available.
     trainer = pl.Trainer(
         max_epochs=args.max_epochs,
         fast_dev_run=args.fast_dev_run,
         log_every_n_steps=log_every_n_steps,
-        callbacks=[checkpoint_callback],
+        callbacks=[checkpoint_callback, progressbar_callback],
+        default_root_dir=os.environ.get("AMLT_OUTPUT_DIR", None),
         accelerator="auto",
         devices="auto",
-        strategy="ddp",
-        replace_sampler_ddp=False,
-        default_root_dir=os.environ.get("AMLT_OUTPUT_DIR", None),
         auto_select_gpus=True,
     )
     if args.mode.lower() in ("both", "train"):

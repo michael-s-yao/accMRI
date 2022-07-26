@@ -9,6 +9,7 @@ Author(s):
 Licensed under the MIT License.
 """
 import h5py
+from fastmri.data.mri_data import et_query
 import matplotlib.pyplot as plt
 import numpy as np
 import os
@@ -20,7 +21,7 @@ from torchvision.transforms import CenterCrop
 import xml.etree.ElementTree as etree
 from torch.utils.data import Dataset
 from typing import (
-    Callable, Dict, NamedTuple, Optional, Sequence, Tuple, Union
+    Callable, Dict, NamedTuple, Optional, Tuple, Union
 )
 
 sys.path.append("..")
@@ -41,6 +42,8 @@ class DiscriminatorSample(NamedTuple):
     slice_idx: int
     uncompressed_ref_kspace: torch.Tensor
     uncompressed_distorted_kspace: torch.Tensor
+    target: torch.Tensor
+    max_value: float
 
 
 class DiscriminatorDataset(Dataset):
@@ -150,6 +153,10 @@ class DiscriminatorDataset(Dataset):
             even_length = (len(self.data) // num_gpus) * num_gpus
             self.data = self.data[:even_length]
 
+        self.recons_key = "reconstruction_esc"
+        if "multicoil" in self.data_path:
+            self.recons_key = "reconstruction_rss"
+
     def __len__(self) -> int:
         """
         Returns the number of samples in our dataset. Required for
@@ -180,10 +187,16 @@ class DiscriminatorDataset(Dataset):
                 kspace = torch.permute(kspace, dims=(0, -1, 1, 2))
                 kspace = T.center_crop(kspace, self.center_crop)
                 kspace = torch.permute(kspace, dims=(0, 2, 3, 1))
+
+            targ = None
+            if self.recons_key in hf:
+                targ = hf[self.recons_key][slice_idx]
+            targ = torch.unsqueeze(T.to_tensor(targ), dim=0)
+
             # Update metadata with any additional data associated with file.
             metadata.update(dict(hf.attrs))
 
-        return self.transform(kspace, metadata, fn, slice_idx)
+        return self.transform(kspace, metadata, fn, slice_idx, targ)
 
     def slice_metadata(self, fn: str) -> Tuple[Dict, int]:
         """
@@ -293,34 +306,3 @@ class DiscriminatorDataset(Dataset):
             )
         else:
             plt.show()
-
-
-def et_query(
-    root: etree.Element,
-    qlist: Sequence[str],
-    namespace: str = "http://www.ismrm.org/ISMRMRD",
-) -> str:
-    """
-    ElementTree query function. This can be used to query an XML document via
-    ElementTree. It uses qlist for nested queries. This function was taken from
-    the fastmri.data.mri_data module in the fastMRI repo.
-    Input:
-        root: root of the XML to search through.
-        qlist: A list of strings for nested searches.
-        namespace: XML namespace to prepend query.
-    Returns:
-        The returned data as a string.
-    """
-    s = "."
-    prefix = "ismrmrd_namespace"
-
-    ns = {prefix: namespace}
-
-    for el in qlist:
-        s += f"//{prefix}:{el}"
-
-    value = root.find(s, ns)
-    if value is None:
-        raise RuntimeError("Value not found.")
-
-    return str(value.text)

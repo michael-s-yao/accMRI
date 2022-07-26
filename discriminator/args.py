@@ -52,9 +52,9 @@ class Main:
         parser.add_argument(
             "--rotation",
             type=float,
-            default=[10.0, 15.0],
+            default=[20.0, 50.0],
             nargs=2,
-            help="Rotation magnitude range (in degrees). Default 10 to 15 deg."
+            help="Rotation magnitude range (in degrees). Default 20 to 50 deg."
         )
         parser.add_argument(
             "--x_range",
@@ -242,7 +242,7 @@ class Inference:
         )
         save_path_help = "Save path for generated outputs."
         parser.add_argument(
-            "--save_path", type=str, default="./output", help=save_path_help
+            "--save_path", type=str, default=None, help=save_path_help
         )
         parser.add_argument(
             "--seed",
@@ -253,14 +253,16 @@ class Inference:
         parser.add_argument(
             "--center_crop",
             type=int,
-            default=[320, 320],
+            default=[256, 256],
             nargs=2,
-            help="kspace crop size. Default (320, 320) (fastMRI default)."
+            help="kspace crop size. Default (256, 256)."
         )
         parser.add_argument(
-            "--histogram",
-            action="store_true",
-            help="Generates heatmap value histogram in cwd."
+            "--rotation",
+            type=float,
+            default=[20.0, 50.0],
+            nargs=2,
+            help="Rotation magnitude range (in degrees). Default 20 to 50 deg."
         )
 
         return parser.parse_args()
