@@ -46,7 +46,7 @@ class Main:
             "--model",
             type=str,
             choices=model_choices,
-            default="mlp",
+            default="cnn",
             help=model_help
         )
         parser.add_argument(
@@ -56,24 +56,28 @@ class Main:
             nargs=2,
             help="Rotation magnitude range (in degrees). Default 20 to 50 deg."
         )
+        x_range_help = "Horizontal translation magnitude range. "
+        x_range_help += "Default no translation."
         parser.add_argument(
             "--x_range",
             type=float,
-            default=[0.05, 0.1],
+            default=[0.0, 0.0],
             nargs=2,
-            help="Horizontal translation magnitude range. Default (0.05, 0.1)."
+            help=x_range_help
         )
+        y_range_help = "Vertical translation magnitude range. "
+        y_range_help += "Default no translation."
         parser.add_argument(
             "--y_range",
             type=float,
-            default=[0.05, 0.1],
+            default=[0.0, 0.0],
             nargs=2,
-            help="Vertical translation magnitude range. Default (0.05, 0.1)."
+            help=y_range_help
         )
         parser.add_argument(
             "--p_transform",
             type=float,
-            default=0.5,
+            default=0.7,
             help="Probability of a kspace dirtying operation. Default 0.5."
         )
         parser.add_argument(
@@ -171,8 +175,8 @@ class Main:
         parser.add_argument(
             "--pools",
             type=int,
-            default=8,
-            help="Number of UNet down- and up- sampling layers. Default 8."
+            default=2,
+            help="Number of UNet down- and up- sampling layers. Default 2."
         )
         parser.add_argument(
             "--mode",
