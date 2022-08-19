@@ -4,14 +4,17 @@ Inference driver program for accelerated MRI reconstruction.
 Author(s):
     Michael Yao
 
-Licensed under the MIT License.
+Licensed under the MIT License. Copyright Microsoft Research 2022.
 """
 from args import Inference
 import matplotlib.pyplot as plt
 import os
 from pytorch_lightning import Trainer
+import sys
+import torch
 from typing import List
 
+sys.path.append("..")
 from pl_modules.data_module import DataModule
 from pl_modules.reconstructor_module import ReconstructorModule
 
@@ -19,6 +22,8 @@ from pl_modules.reconstructor_module import ReconstructorModule
 def infer():
     args = Inference.build_args()
 
+    if args.use_deterministic:
+        torch.use_deterministic_algorithms(True)
     data_module = DataModule(
         args.data_path,
         cache_path=args.cache_path,
@@ -28,24 +33,27 @@ def infer():
         center_crop=args.center_crop,
         num_workers=0,
         fixed_acceleration=args.fixed_acceleration,
-        tl=args.simulated
+        tl=args.simulated,
+        seed=args.seed
     )
     if args.model is None:
         infer_model = ReconstructorModule(
-            model="varnet",
-            is_multicoil=True,
-            use_zero_filled=args.use_zero_filled
+            model="varnet", is_multicoil=True, use_zero_filled=True
         )
     else:
         infer_model = ReconstructorModule.load_from_checkpoint(args.model)
+        if not args.enable_progress_bar:
+            print("\nRunning Model: " + str(args.model), flush=True)
+            infer_model.verbose_inference = True
 
     infer_model.reconstructor = infer_model.reconstructor.eval()
     trainer = Trainer(
-        accelerator="auto",
-        devices="auto",
+        accelerator=("gpu" if args.num_gpus > 0 else "cpu"),
+        devices=min(args.num_gpus, 1),
         enable_checkpointing=False,
         logger=False,
-        max_epochs=1, progress_bar_refresh_rate=0
+        max_epochs=1,
+        enable_progress_bar=args.enable_progress_bar
     )
     predictions = trainer.predict(
         infer_model, dataloaders=data_module.predict_dataloader()

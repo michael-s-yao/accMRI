@@ -10,19 +10,18 @@ Author(s):
     Michael Yao
     Michael Hansen
 
-Licensed under the MIT License.
+Licensed under the MIT License. Copyright Microsoft Research 2022.
 """
+from fastmri.fftc import fft2c_new
+from fastmri.math import complex_mul
 import numpy as np
 import phantominator as P
 from scipy.ndimage.filters import gaussian_filter
-import sys
 import torch
 from typing import Optional, Sequence, Tuple, Union
 
-sys.path.append(".")
 from data.dataset import ReconstructorSample
-from helper.utils import math as M
-from helper.utils import transforms as T
+from tools import transforms as T
 
 
 class SheppLoganDataset(torch.utils.data.Dataset):
@@ -64,6 +63,7 @@ class SheppLoganDataset(torch.utils.data.Dataset):
             min_lines_acquired: minimum number of total lines acquired.
             seed: optional random seed.
         """
+        self.transform = None
         self.rng = np.random.RandomState(seed)
         self.num_samples = num_samples
         self.num_coils = num_coils
@@ -278,7 +278,7 @@ class SheppLoganDataset(torch.utils.data.Dataset):
         Returns:
             Individual coil images.
         """
-        return M.fft2c(M.complex_mul(x, sens_maps))
+        return fft2c_new(complex_mul(x, sens_maps))
 
     def _sens_maps(
         self,

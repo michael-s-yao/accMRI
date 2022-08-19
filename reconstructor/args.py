@@ -4,9 +4,11 @@ CLI-friendly argument parser for accelerated MRI reconstructors.
 Author(s):
     Michael Yao
 
-Licensed under the MIT License.
+Licensed under the MIT License. Copyright Microsoft Research 2022.
 """
 import argparse
+import os
+import time
 
 
 class Main:
@@ -38,9 +40,9 @@ class Main:
         parser.add_argument(
             "--center_crop",
             type=int,
-            default=[320, 320],
+            default=[256, 256],
             nargs=2,
-            help="Image crop size. Default (320, 320) (fastMRI default)."
+            help="Image crop size. Default (256, 256)."
         )
         parser.add_argument(
             "--fixed_acceleration",
@@ -57,7 +59,7 @@ class Main:
         parser.add_argument(
             "--seed",
             type=int,
-            default=None,
+            default=int(time.time()),
             help="Optional random seed. Default to seconds since epoch."
         )
         parser.add_argument(
@@ -71,6 +73,11 @@ class Main:
             type=int,
             default=4,
             help="Number of workers. Default 4."
+        )
+        parser.add_argument(
+            "--use_distributed_sampler",
+            action="store_true",
+            help="Specify whether to use distributed sampler."
         )
         parser.add_argument(
             "--lr",
@@ -165,7 +172,13 @@ class Main:
             "--num_gpus",
             type=int,
             default=0,
-            help="Number of GPUs in use."
+            help="Number of GPUs in use. Default CPU only."
+        )
+        parser.add_argument(
+            "--num_nodes",
+            type=int,
+            default=1,
+            help="Number of nodes in use. Default 1."
         )
         parser.add_argument(
             "--ckpt_path",
@@ -205,7 +218,10 @@ class Inference:
         parser.add_argument(
             "--data_path",
             type=str,
-            required=True,
+            default=os.path.join(
+                os.environ.get("AMLT_DATA_DIR", "/mnt/fastmri"),
+                "multicoil_val"
+            ),
             help="A file or folder of undersampled kspace data."
         )
         parser.add_argument(
@@ -249,6 +265,28 @@ class Inference:
             type=str,
             default=None,
             help="Path to save image reconstructions to. Default None."
+        )
+        parser.add_argument(
+            "--use_deterministic",
+            action="store_true",
+            help="Specify whether to use deterministic algorithms for `torch`."
+        )
+        parser.add_argument(
+            "--seed",
+            type=int,
+            default=42,
+            help="Optional random seed. Default 42."
+        )
+        parser.add_argument(
+            "--enable_progress_bar",
+            action="store_true",
+            help="Enable TQDM Progress Bar."
+        )
+        parser.add_argument(
+            "--num_gpus",
+            type=int,
+            default=0,
+            help="Number of GPUs to use. Default no GPUs."
         )
 
         return parser.parse_args()

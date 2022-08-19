@@ -1,27 +1,27 @@
 """
-Defines the data loader for training accelerated MRI reconstruction models.
+Defines the dataset for training accelerated MRI reconstruction models.
 Portions of this code were taken from the fastMRI repository at
 https://github.com/facebookresearch/fastMRI.
 
 Author(s):
     Michael Yao
 
-Licensed under the MIT License.
+Licensed under the MIT License. Copyright Microsoft Research 2022.
 """
 import os
+from fastmri.data.mri_data import et_query
+from fastmri.fftc import ifft2c_new
+from fastmri.math import complex_abs
 import h5py
 import matplotlib.pyplot as plt
 import numpy as np
 import pickle
-import sys
 import torch
 import xml.etree.ElementTree as etree
 from torch.utils.data import Dataset
-from typing import Callable, Dict, NamedTuple, Optional, Sequence, Tuple, Union
+from typing import Callable, Dict, NamedTuple, Optional, Tuple, Union
 
-sys.path.append("..")
-from helper.utils.math import complex_abs, ifft2c
-import helper.utils.transforms as T
+from tools import transforms as T
 
 
 class ReconstructorSample(NamedTuple):
@@ -63,6 +63,7 @@ class ReconstructorDataset(Dataset):
                 load times.
         """
         super().__init__()
+
         self.transform = transform
         self.fast_dev_run = fast_dev_run
         self.rng = np.random.RandomState(seed)
@@ -140,6 +141,7 @@ class ReconstructorDataset(Dataset):
         self.recons_key = "reconstruction_esc"
         if multicoil:
             self.recons_key = "reconstruction_rss"
+        self.start, self.end = 0, len(self.data)
 
     def __len__(self) -> int:
         """
@@ -150,7 +152,7 @@ class ReconstructorDataset(Dataset):
         Returns:
             Number of samples in our dataset.
         """
-        return len(self.data)
+        return len(self.data[self.start:self.end])
 
     def __getitem__(self, idx: int) -> ReconstructorSample:
         """
@@ -246,7 +248,7 @@ class ReconstructorDataset(Dataset):
             else:
                 ax[ax_count].imshow(
                     torch.sqrt(
-                        complex_abs(ifft2c(data[[coil], :, :, :])).sum(0)
+                        complex_abs(ifft2c_new(data[[coil], :, :, :])).sum(0)
                     ),
                     cmap=cmap,
                 )
@@ -296,34 +298,3 @@ class ReconstructorDataset(Dataset):
         }
 
         return metadata, num_slices
-
-
-def et_query(
-    root: etree.Element,
-    qlist: Sequence[str],
-    namespace: str = "http://www.ismrm.org/ISMRMRD",
-) -> str:
-    """
-    ElementTree query function. This can be used to query an XML document via
-    ElementTree. It uses qlist for nested queries. This function was taken from
-    the fastmri.data.mri_data module in the fastMRI repo.
-    Input:
-        root: root of the XML to search through.
-        qlist: A list of strings for nested searches.
-        namespace: XML namespace to prepend query.
-    Returns:
-        The returned data as a string.
-    """
-    s = "."
-    prefix = "ismrmrd_namespace"
-
-    ns = {prefix: namespace}
-
-    for el in qlist:
-        s += f"//{prefix}:{el}"
-
-    value = root.find(s, ns)
-    if value is None:
-        raise RuntimeError("Value not found.")
-
-    return str(value.text)

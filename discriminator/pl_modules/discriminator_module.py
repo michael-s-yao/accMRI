@@ -4,21 +4,18 @@ PyTorch Lightning module for the kspace discriminator model.
 Author(s):
     Michael Yao
 
-Licensed under the MIT License.
+Licensed under the MIT License. Copyright Microsoft Research 2022.
 """
 import matplotlib.pyplot as plt
 import os
 import pytorch_lightning as pl
-import sys
 import torch
 import torch.nn as nn
+from torchmetrics.metric import Metric
 from typing import Optional, Tuple
 
-from torchmetrics.metric import Metric
 from models.discriminator import Discriminator
-
-sys.path.append("..")
-import helper.utils.transforms as T
+from tools import transforms as T
 
 
 class DiscriminatorModule(pl.LightningModule):

@@ -6,16 +6,14 @@ https://github.com/facebookresearch/fastMRI.
 Author(s):
     Michael Yao
 
-Licensed under the MIT License.
+Licensed under the MIT License. Copyright Microsoft Research 2022.
 """
 import numpy as np
-import sys
 import torch
 from typing import Optional, Sequence, Tuple, Union
 from data.dataset import ReconstructorSample
 
-sys.path.append("..")
-import helper.utils.transforms as T
+from tools import transforms as T
 
 
 class ReconstructorDataTransform:
@@ -166,7 +164,7 @@ class ReconstructorDataTransform:
             )
         )
         right = (w // 2) + torch.argmin(mask[w // 2:])
-        center_mask = torch.zeros_like(mask, dtype=torch.float32).to(mask)
+        center_mask = torch.zeros_like(mask, dtype=torch.float32).type_as(mask)
         center_mask[left:right] = 1.0
         return center_mask, torch.sum(center_mask)
 

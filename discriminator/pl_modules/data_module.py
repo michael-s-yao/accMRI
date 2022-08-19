@@ -4,19 +4,17 @@ Data module to train, validate, and test a kspace discriminator.
 Author(s):
     Michael Yao
 
-Licensed under the MIT License.
+Licensed under the MIT License. Copyright Microsoft Research 2022.
 """
 import os
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
-import sys
 import torch
 from typing import Optional, Sequence, Tuple
 from data.dataset import DiscriminatorDataset, DiscriminatorSample
 from data.transform import DiscriminatorDataTransform
 
-sys.path.append("..")
-import helper.utils.transforms as T
+from tools import transforms as T
 
 
 class DataModule(pl.LightningDataModule):

@@ -4,9 +4,10 @@ CLI-friendly argument parser for kspace discriminator.
 Author(s):
     Michael Yao
 
-Licensed under the MIT License.
+Licensed under the MIT License. Copyright Microsoft Research 2022.
 """
 import argparse
+import os
 
 
 class Main:
@@ -17,7 +18,7 @@ class Main:
         parser.add_argument(
             "--data_path",
             type=str,
-            default="",
+            default="./",
             help="Folder path to train, val, and test data subdirectories."
         )
         parser.add_argument(
@@ -26,6 +27,8 @@ class Main:
             default=None,
             help="Optional dataset cache file to use for faster load times."
         )
+        # While we implemented our models to be compatible with multi-coil
+        # input data, we did not explore their performance in our work.
         parser.add_argument(
             "--coil_compression",
             type=int,
@@ -37,6 +40,8 @@ class Main:
             action="store_true",
             help="Explicitly specify whether to use multicoil data."
         )
+        # While we implemented other model architectures, such as MLP and
+        # U-Net variants, we did not find much success with them.
         model_choices = (
             "NormUNet", "normunet", "UNet", "unet", "MLP", "mlp", "CNN", "cnn"
         )
@@ -77,7 +82,7 @@ class Main:
         parser.add_argument(
             "--p_transform",
             type=float,
-            default=0.7,
+            default=0.5,
             help="Probability of a kspace dirtying operation. Default 0.5."
         )
         parser.add_argument(
@@ -121,9 +126,6 @@ class Main:
             type=int,
             default=None,
             help="Optional random seed. Default to seconds since epoch."
-        )
-        parser.add_argument(
-            "--batch_size", type=int, default=1, help="Batch size. Default 1."
         )
         parser.add_argument(
             "--num_workers",
@@ -197,6 +199,7 @@ class Main:
             default=None,
             help="Optional path to checkpoint to resume training from."
         )
+        # A center crop of 128x128 was used in our experiments.
         parser.add_argument(
             "--center_crop",
             type=int,
@@ -214,8 +217,9 @@ class Inference:
         parser = argparse.ArgumentParser(description="k-space Discriminator")
 
         parser.add_argument(
-            "data_path",
+            "--data_path",
             type=str,
+            required=True,
             help="A file or folder of undersampled acquired kspace data."
         )
         parser.add_argument(
@@ -233,10 +237,12 @@ class Inference:
         threshmin_help = "Threshold for heatmap values, above which acquired "
         threshmin_help += "kspace measurements are considered dirty."
         parser.add_argument(
-            "--threshmin", type=float, default=0.98, help=threshmin_help
+            "--threshmin", type=float, default=0.1, help=threshmin_help
         )
         model_help = "Path to model checkpoint to use for inference. If not "
-        model_help += "specified, then no kspace processing is applied."
+        model_help += "specified, then no kspace processing is applied. If "
+        model_help += "`model` == 'baseline', then baseline signal "
+        model_help += "cross-correlation-based method is used."
         parser.add_argument("--model", type=str, default=None, help=model_help)
         reconstructor_help = "Path to reconstructor checkpoint to use for "
         reconstructor_help += "reconstruction. If not specified, then "
@@ -244,9 +250,20 @@ class Inference:
         parser.add_argument(
             "--reconstructor", type=str, default=None, help=reconstructor_help
         )
-        save_path_help = "Save path for generated outputs."
+        gt_correlation_map_help = "Path to ground truth correlation maps "
+        gt_correlation_map_help += "stored as a pickle file. Required if "
+        gt_correlation_map_help += "using `model` == 'baseline'."
         parser.add_argument(
-            "--save_path", type=str, default=None, help=save_path_help
+            "--gt_correlation_map",
+            type=str,
+            default=None,
+            help=gt_correlation_map_help
+        )
+        parser.add_argument(
+            "--save_path",
+            type=str,
+            default=os.environ.get("AMLT_OUTPUT_DIR", "./"),
+            help="Save path for generated outputs."
         )
         parser.add_argument(
             "--seed",
@@ -257,9 +274,9 @@ class Inference:
         parser.add_argument(
             "--center_crop",
             type=int,
-            default=[256, 256],
             nargs=2,
-            help="kspace crop size. Default (256, 256)."
+            default=(256, 256),
+            help="Final image crop size. Default (256, 256)."
         )
         parser.add_argument(
             "--rotation",
@@ -267,6 +284,25 @@ class Inference:
             default=[20.0, 50.0],
             nargs=2,
             help="Rotation magnitude range (in degrees). Default 20 to 50 deg."
+        )
+        parser.add_argument(
+            "--center_frac",
+            type=float,
+            default=0.04,
+            help="Center fraction to define ACS lines. Default 0.04."
+        )
+        cpu_help = "Specify whether to run everything on the CPU, even if "
+        cpu_help += "GPU(s) is available."
+        parser.add_argument("--cpu", action="store_true", help=cpu_help)
+        parser.add_argument(
+            "--use_deterministic",
+            action="store_true",
+            help="Specify whether to use deterministic algorithms for `torch`."
+        )
+        parser.add_argument(
+            "--accuracy_by_line",
+            action="store_true",
+            help="Optional flag to save accuracy scores per kspace line."
         )
 
         return parser.parse_args()

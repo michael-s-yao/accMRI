@@ -8,22 +8,21 @@ https://github.com/facebookresearch/fastMRI.
 Authors(s):
     Michael Yao
 
-Licensed under the MIT License.
+Licensed under the MIT License. Copyright Microsoft Research 2022.
 
 Sriram A, Zbontar J, Murrell T, Defazio A, Zitnick CL, ... Johnson P. (2020).
 End-to-End Variational Networks for Accelerated MRI Reconstruction. MICCAI
 64-73.
 """
+from fastmri.coil_combine import rss_complex
+from fastmri.fftc import ifft2c_new
 import numpy as np
-import sys
 import torch
 from torch import nn
 from typing import Optional, Tuple
 from models.unet import NormUNet
 
-sys.path.append("..")
-from helper.utils.math import rss_complex, ifft2c
-import helper.utils.transforms as T
+from tools import transforms as T
 
 
 class SensitivityModel(nn.Module):
@@ -146,7 +145,7 @@ class SensitivityModel(nn.Module):
             kspace = T.apply_mask(masked_kspace, mask)
 
         # Convert to image space.
-        images, batches = self.chans_to_batch_dim(ifft2c(kspace))
+        images, batches = self.chans_to_batch_dim(ifft2c_new(kspace))
 
         # Estimate sensitivities.
         return self.divide_rss(

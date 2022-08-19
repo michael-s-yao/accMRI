@@ -1,10 +1,10 @@
 """
-Basic multilayer perceptron.
+Multilayer perceptron (MLP) implementation.
 
 Author(s):
     Michael Yao
 
-Licensed under the MIT License.
+Licensed under the MIT License. Copyright Microsoft Research 2022.
 """
 from collections import OrderedDict
 import torch

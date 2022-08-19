@@ -5,8 +5,9 @@ operations from input kspace data.
 Author(s):
     Michael Yao
 
-Licensed under the MIT License.
+Licensed under the MIT License. Copyright Microsoft Research 2022.
 """
+from fastmri.math import complex_abs
 import torch
 from torch import nn
 from typing import Optional
@@ -14,7 +15,6 @@ from typing import Optional
 from models.mlp import MLP
 from models.conv import ConvBlock
 from models.unet import NormUNet, UNet
-from helper.utils import math as M
 
 
 class Discriminator(nn.Module):
@@ -112,12 +112,12 @@ class Discriminator(nn.Module):
             0.0 and 1.0. Values closer to 1.0 have lower fidelity.
         """
         if isinstance(self.model, MLP):
-            # Estimate center mask from acquired_mask.
             batch_idxs, idxs = torch.nonzero(acquiring_mask, as_tuple=True)
             mid = acquired_mask.size()[-1] // 2
             heatmap = torch.zeros_like(acquiring_mask).type(torch.float32)
             heatmap = torch.unsqueeze(heatmap, dim=-1)
             for b, i in zip(batch_idxs, idxs):
+                # Estimate center mask from acquired_mask.
                 right = torch.nonzero(
                     acquired_mask[b, mid:] < 1.0, as_tuple=True
                 )[0][0] + mid
@@ -127,10 +127,10 @@ class Discriminator(nn.Module):
                 )[0][0] + 1
                 for center_idx in range(left, right):
                     acquiring_features = torch.flatten(
-                        M.complex_abs(acquiring_kspace[b, :, :, i, :])
+                        complex_abs(acquiring_kspace[b, :, :, i, :])
                     )
                     acquired_features = torch.flatten(
-                        M.complex_abs(acquired_kspace[b, :, :, center_idx, :])
+                        complex_abs(acquired_kspace[b, :, :, center_idx, :])
                     )
                     if self.feature_learning is not None:
                         features = torch.unsqueeze(

@@ -4,9 +4,11 @@ Implementation of the image reconstruction module.
 Author(s):
     Michael Yao
 
-Licensed under the MIT License.
+Licensed under the MIT License. Copyright Microsoft Research 2022.
 """
-import sys
+from fastmri.coil_combine import rss
+from fastmri.fftc import ifft2c_new
+from fastmri.math import complex_abs, complex_conj, complex_mul
 import torch
 from torch import nn
 from typing import Optional
@@ -14,11 +16,6 @@ from typing import Optional
 from models.unet import UNet
 from models.varnet import VarNet
 from models.sens import SensitivityModel
-
-sys.path.append("..")
-from helper.utils.math import (
-    complex_mul, ifft2c, complex_conj, rss, complex_abs
-)
 
 
 class Reconstructor(nn.Module):
@@ -88,7 +85,7 @@ class Reconstructor(nn.Module):
         """
         # Return the zero-filled reconstruction if self.model is None.
         if self.model is None:
-            return rss(complex_abs(ifft2c(masked_kspace)), dim=1)
+            return rss(complex_abs(ifft2c_new(masked_kspace)), dim=1)
 
         # Calculate coil sensitivity maps.
         sens_maps = None
@@ -102,7 +99,7 @@ class Reconstructor(nn.Module):
             if self.is_multicoil:
                 image = self.sens_reduce(masked_kspace, sens_maps)
             else:
-                image = ifft2c(masked_kspace)
+                image = ifft2c_new(masked_kspace)
             cimg = self.chan_complex_to_last_dim(
                 self.model(self.complex_to_chan_dim(image))
             )
@@ -124,7 +121,7 @@ class Reconstructor(nn.Module):
             Combined image.
         """
         return complex_mul(
-            ifft2c(x), complex_conj(sens_maps)
+            ifft2c_new(x), complex_conj(sens_maps)
         ).sum(dim=1, keepdim=True)
 
     def complex_to_chan_dim(self, x: torch.Tensor) -> torch.Tensor:

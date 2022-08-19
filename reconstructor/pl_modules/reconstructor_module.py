@@ -4,12 +4,12 @@ PyTorch Lightning module for the accelerated MRI reconstruction model.
 Author(s):
     Michael Yao
 
-Licensed under the MIT License.
+Licensed under the MIT License. Copyright Microsoft Research 2022.
 """
 from collections import defaultdict, OrderedDict
+from fastmri.evaluate import mse
 import pathlib
 import numpy as np
-import sys
 import torch
 from pathlib import Path
 import pytorch_lightning as pl
@@ -18,9 +18,8 @@ from torchmetrics.metric import Metric
 from models.reconstructor import Reconstructor
 from models.loss import SSIMLoss, EWCLoss
 
-sys.path.append("..")
-from helper.utils.evaluate import mse, ssim, save_reconstructions
-import helper.utils.transforms as T
+from tools.evaluate import ssim, save_reconstructions
+import tools.transforms as T
 
 
 class ReconstructorModule(pl.LightningModule):
@@ -45,7 +44,8 @@ class ReconstructorModule(pl.LightningModule):
         use_zero_filled: bool = False,
         ewc: Optional[float] = 0.0,
         ewc_dataloader: Optional[torch.utils.data.DataLoader] = None,
-        ewc_state_dict: Optional[Union[Path, str]] = None
+        ewc_state_dict: Optional[Union[Path, str]] = None,
+        verbose_inference: bool = False
     ):
         """
         Args:
@@ -73,12 +73,10 @@ class ReconstructorModule(pl.LightningModule):
                 regularization.
             ewc_state_dict: path to checkpoint file from first learning task
                 in sequential learning. Default None.
+            verbose_inference: whether we want verbose output during inference.
         """
         super().__init__()
         self.save_hyperparameters()
-
-        self.azure_dataset_id = "knee"
-        self.local_dataset = "/home/t-michaelyao/accMRI/common/data/knee"
 
         self.chans = chans
         self.pools = pools
@@ -93,6 +91,7 @@ class ReconstructorModule(pl.LightningModule):
         self.num_log_images = num_log_images
         self.val_log_indices = None
         self.save_reconstructions = save_reconstructions
+        self.verbose_inference = verbose_inference
 
         self.NMSE = DistributedMetricSum()
         self.SSIM = DistributedMetricSum()
@@ -111,7 +110,7 @@ class ReconstructorModule(pl.LightningModule):
             use_zero_filled=use_zero_filled,
         )
 
-        if ewc > 0.0 and ewc_state_dict is not None:
+        if ewc_state_dict is not None:
             state_dict = torch.load(ewc_state_dict)["state_dict"]
             updt_state_dict = OrderedDict()
             for k in state_dict.keys():
@@ -129,7 +128,7 @@ class ReconstructorModule(pl.LightningModule):
                 model=self.reconstructor,
                 dataloader=ewc_dataloader,
                 lambda_=ewc,
-                fim_cache_path="./knee_multicoil_fim.pkl"
+                fim_cache_path="./knee_multicoil_demo_fim.pkl"
             )
         else:
             self.ewc_loss = None
@@ -162,6 +161,8 @@ class ReconstructorModule(pl.LightningModule):
         )
         if self.ewc_loss is not None:
             regularizer_loss = self.ewc_loss(self.reconstructor)
+        else:
+            regularizer_loss = 0.0
 
         self.log("train_loss", loss)
         self.log("regularization_loss", regularizer_loss)
@@ -178,10 +179,6 @@ class ReconstructorModule(pl.LightningModule):
             torch.unsqueeze(target, dim=1),
             data_range=batch.max_value
         )
-        if self.ewc_loss is not None:
-            val_loss += self.ewc_loss(self.reconstructor)
-
-        self.log("mask", batch.mask, batch_size=batch.masked_kspace.size()[0])
         self.log(
             "ssim", 1 - val_loss, batch_size=batch.masked_kspace.size()[0]
         )
@@ -247,11 +244,17 @@ class ReconstructorModule(pl.LightningModule):
             target = val_logs["target"][i]
             # Compute and save MSE.
             mse_vals[fname][slice_num] = torch.tensor(
-                mse(target, output)
+                mse(
+                    target.detach().cpu().numpy(),
+                    output.detach().cpu().numpy()
+                )
             ).view(1)
             # Compute and save target norm.
             target_norms[fname][slice_num] = torch.tensor(
-                mse(target, torch.zeros_like(target))
+                mse(
+                    target.detach().cpu().numpy(),
+                    torch.zeros_like(target).detach().cpu().numpy()
+                )
             ).view(1)
             # Compute and save SSIM.
             ssim_vals[fname][slice_num] = torch.Tensor(
@@ -321,7 +324,35 @@ class ReconstructorModule(pl.LightningModule):
         else:
             target = None
             ssim = -1
+        accfactor = batch.mask.size()[-1] / torch.sum(batch.mask, dim=1).item()
 
+        if self.verbose_inference:
+            if target is not None:
+                mse_val = mse(
+                    output.detach().cpu().numpy(),
+                    target.detach().cpu().numpy()
+                )
+                target_norm = mse(
+                    target.detach().cpu().numpy(),
+                    torch.zeros_like(
+                        target
+                    ).type_as(target).detach().cpu().numpy()
+                )
+                psnr = (20 * torch.log10(batch.max_value)) - (
+                    10 * np.log10(mse_val)
+                )
+                psnr = psnr.item()
+            else:
+                mse_val = 0.0
+                target_norm = 1.0
+                psnr = 0.0
+            print(
+                f"SSIM {ssim.item()},",
+                f"NMSE {mse_val / target_norm},",
+                f"PSNR {psnr},",
+                f"Acceleration Factor {accfactor},",
+                flush=True
+            )
         if target is not None:
             target = target.detach().cpu().numpy()
         return {
@@ -330,6 +361,8 @@ class ReconstructorModule(pl.LightningModule):
             "output": output.detach().cpu().numpy(),
             "target": target,
             "ssim": ssim,
+            "acc_factor": accfactor,
+            "mask": batch.mask.detach().cpu().numpy()
         }
 
     def configure_optimizers(self):
@@ -375,7 +408,7 @@ class ReconstructorModule(pl.LightningModule):
             )
             metrics["nmse"] += mse_val / target_norm
             metrics["psnr"] += (20 * torch.log10(
-                max_vals[fname].type(mse_val.dtype).to(mse_val.device)
+                max_vals[fname].type(mse_val.dtype)
             )) - (10 * torch.log10(mse_val))
             metrics["ssim"] += torch.mean(
                 torch.cat([v.view(-1) for _, v in ssim_vals[fname].items()])

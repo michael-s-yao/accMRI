@@ -1,26 +1,28 @@
 """
-Implementation for variational network image reconstructor. Our model
-applies a combination of soft data consistency with the input model as a
-regularizer. Portions of this code, including certain choices for default
-model parameters, were taken from the fastMRI repository at
-https://github.com/facebookresearch/fastMRI.
+Implementation of the E2E-VarNet image reconstructor. Portions of this code,
+including certain choices for default model parameters, were taken from the
+fastMRI repository at https://github.com/facebookresearch/fastMRI.
 
 Author(s):
     Michael Yao
 
-Licensed under the MIT License.
+Citation:
+    Anuroop Sriram, Jure Zbontar, Tullie Murrell, Aaron Defazio, C. Lawrence
+    Zitnick, Nafissa Yakubova, Florian Knoll and Patricia Johnson. (2020).
+    End-to-end variational networks for accelerated MRI reconstruction. arXiv
+    Preprint. doi: 10.48550/arXiv.2004.06688
+
+Licensed under the MIT License. Copyright Microsoft Research 2022.
 """
-import sys
+from fastmri.fftc import fft2c_new, ifft2c_new
+from fastmri.math import complex_abs, complex_conj, complex_mul
+from fastmri.coil_combine import rss
 import torch
 from torch import nn
 from typing import Optional
 from models.unet import NormUNet
 
-sys.path.append("..")
-from helper.utils.math import (
-    complex_mul, fft2c, ifft2c, complex_conj, rss, complex_abs
-)
-import helper.utils.transforms as T
+from tools import transforms as T
 
 
 class VarNet(nn.Module):
@@ -82,7 +84,7 @@ class VarNet(nn.Module):
                 pred_kspace, masked_kspace, mask, sens_maps
             )
 
-        return rss(complex_abs(ifft2c(pred_kspace)), dim=1)
+        return rss(complex_abs(ifft2c_new(pred_kspace)), dim=1)
 
 
 class VarNetBlock(nn.Module):
@@ -119,7 +121,7 @@ class VarNetBlock(nn.Module):
         Returns:
             Individual coil images.
         """
-        return fft2c(complex_mul(x, sens_maps))
+        return fft2c_new(complex_mul(x, sens_maps))
 
     @staticmethod
     def sens_reduce(
@@ -136,7 +138,7 @@ class VarNetBlock(nn.Module):
             Combined image.
         """
         return complex_mul(
-            ifft2c(x), complex_conj(sens_maps)
+            ifft2c_new(x), complex_conj(sens_maps)
         ).sum(dim=1, keepdim=True)
 
     def forward(
@@ -155,7 +157,7 @@ class VarNetBlock(nn.Module):
         Returns:
             Estimated reconstruction of masked_kspace data.
         """
-        zeros = torch.zeros_like(pred_kspace).to(pred_kspace)
+        zeros = torch.zeros_like(pred_kspace).type_as(pred_kspace)
         soft_dc = self.dc_weight * torch.where(
             T.extend_dims(mask, ref_kspace.size()) > 0.0,
             pred_kspace - ref_kspace,

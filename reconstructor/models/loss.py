@@ -6,7 +6,7 @@ https://github.com/facebookresearch/fastMRI.
 Authors(s):
     Michael Yao
 
-Licensed under the MIT License.
+Licensed under the MIT License. Copyright Microsoft Research 2022.
 """
 from copy import deepcopy
 import os
@@ -18,7 +18,7 @@ from torch.nn import functional as F
 from tqdm import tqdm
 from typing import Optional, Union
 
-from helper.utils import transforms as T
+from tools import transforms as T
 
 
 class SSIMLoss(nn.Module):
@@ -38,8 +38,6 @@ class SSIMLoss(nn.Module):
         self.register_buffer(
             "w", torch.ones((1, 1, win_size, win_size)) / win_size ** 2
         )
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.w = self.w.to(device)
         # Normalization factor when calculating variance or covariance below.
         self.cov_norm = (win_size ** 2) / ((win_size ** 2) - 1)
 
@@ -93,7 +91,6 @@ def structural_similarity(
     win_size: int = 7,
     k1: float = 0.01,
     k2: float = 0.03,
-    device: str = None,
 ) -> float:
     """
     Calculates SSIM(X, Y). If there are multiple batches, calculates the
@@ -105,23 +102,19 @@ def structural_similarity(
         win_size: window size for SSIM calculation.
         k1: k1 parameter for SSIM calculation.
         k2: k2 parameter for SSIM calculation.
-        device: device specification. Uses CUDA if available by default.
     Returns:
         SSIM(X, Y).
     """
     if X.size() != Y.size() or len(X.size()) != 3:
         raise ValueError(f"Unexpected input sizes {X.size()} and {Y.size()}")
 
-    w = torch.ones((1, 1, win_size, win_size)) / win_size ** 2
-    if device is None:
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-    w = w.to(device)
-
     # Normalization factor when calculating variance or covariance below.
     cov_norm = (win_size ** 2) / ((win_size ** 2) - 1)
 
-    X = torch.unsqueeze(X.to(device), dim=0)
-    Y = torch.unsqueeze(Y.to(device), dim=0)
+    X = torch.unsqueeze(X, dim=0)
+    Y = torch.unsqueeze(Y, dim=0).type_as(X)
+    w = torch.ones((1, 1, win_size, win_size)) / win_size ** 2
+    w = w.type_as(X)
     ux = F.conv2d(X, w)  # E(X).
     uy = F.conv2d(Y, w)  # E(Y).
     uxx = F.conv2d(X * X, w)  # E(X ** 2).
@@ -131,7 +124,7 @@ def structural_similarity(
     vy = cov_norm * (uyy - (uy * uy))  # Var(Y).
     vxy = cov_norm * (uxy - (ux * uy))  # CoVar(X, Y).
 
-    L = data_range.to(device)  # Dynamic range of pixel values.
+    L = data_range.type_as(X)  # Dynamic range of pixel values.
     C1 = (k1 * L) ** 2  # (k1 * L) ** 2.
     C2 = (k2 * L) ** 2  # (k1 * L) ** 2.
     N1, N2, D1, D2 = (
@@ -188,7 +181,7 @@ class EWCLoss(nn.Module):
         for name, param in deepcopy(self.init_params).items():
             self.means[name] = param.data
 
-    def compute_fischer(self):
+    def compute_fischer(self) -> dict:
         """
         Computes the diagonal Fisher Information Matrix of the neural network.
         Input:
@@ -252,8 +245,12 @@ class EWCLoss(nn.Module):
         loss = 0.0
         for name, param in model.named_parameters():
             loss += torch.sum(
-                self.diag_fim[name].to(self.device) * torch.square(
-                    param.to(self.device) - self.means[name].to(self.device)
+                self.diag_fim[name] * torch.square(
+                    param.type_as(
+                        self.diag_fim[name]
+                    ) - self.means[name].type_as(
+                        self.diag_fim[name]
+                    )
                 )
             )
         return (self.lambda_ / 2.0) * loss

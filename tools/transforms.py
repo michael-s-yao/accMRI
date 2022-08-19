@@ -1,7 +1,7 @@
 """
-Complex tensor manipulation functions from the fastMRI repository. Portions of
-this code were taken from the fastMRI repository at https://github.com/faceboo
-kresearch/fastMRI.
+Complex tensor manipulation functions from the fastMRI repository.
+Portions of this code were taken from the fastMRI repository at
+https://github.com/facebookresearch/fastMRI.
 
 Author(s):
     Michael Yao
@@ -157,19 +157,3 @@ def extend_dims(
         raise AssertionError(
             f"Incompatible input {x.size()} and ref {ref_size} dimensions."
         )
-
-
-def scale_max_value(
-    x: torch.Tensor, max_val: Union[torch.Tensor, float]
-) -> torch.Tensor:
-    """
-    Scales x to have a maximum value of max_val.
-    Input:
-        x: input tensor.
-        max_val: maximum value to scale x to.
-    """
-    if isinstance(max_val, float):
-        max_val = abs(max_val)
-    else:
-        max_val = torch.abs(max_val)
-    return torch.divide(max_val * x, torch.max(x)).type(x.dtype)

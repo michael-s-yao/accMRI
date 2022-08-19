@@ -6,15 +6,16 @@ https://github.com/facebookresearch/fastMRI.
 Author(s):
     Michael Yao
 
-Licensed under the MIT License.
+Licensed under the MIT License. Copyright Microsoft Research 2022.
 """
 import h5py
 from fastmri.data.mri_data import et_query
+from fastmri.coil_combine import rss_complex
+from fastmri.fftc import ifft2c_new
 import matplotlib.pyplot as plt
 import numpy as np
 import os
 import pickle
-import sys
 import time
 import torch
 from torchvision.transforms import CenterCrop
@@ -24,9 +25,7 @@ from typing import (
     Callable, Dict, NamedTuple, Optional, Tuple, Union
 )
 
-sys.path.append("..")
-from helper.utils import transforms as T
-from helper.utils.math import ifft2c, rss_complex
+from tools import transforms as T
 
 
 class DiscriminatorSample(NamedTuple):
@@ -42,7 +41,6 @@ class DiscriminatorSample(NamedTuple):
     slice_idx: int
     uncompressed_ref_kspace: torch.Tensor
     uncompressed_distorted_kspace: torch.Tensor
-    target: torch.Tensor
     max_value: float
 
 
@@ -140,8 +138,9 @@ class DiscriminatorDataset(Dataset):
                     "Saved dataset cache to",
                     f"{os.path.abspath(self.dataset_cache_file)}."
                 )
-        # For MLP training, split the validation dataset into half for
-        # validation and half for testing.
+        # Split the validation dataset into half for validation and half
+        # for testing. Make sure to use the same seed during both model
+        # training and inference.
         mid = len(self.data) // 2
         if is_mlp and split is not None and split.lower() == "val":
             self.data[:mid]
@@ -285,12 +284,12 @@ class DiscriminatorDataset(Dataset):
         )
         axs[0, 1].set_title("Distorted kspace")
         axs[1, 0].imshow(
-            crop(rss_complex(ifft2c(item.ref_kspace))), cmap="gray"
+            crop(rss_complex(ifft2c_new(item.ref_kspace))), cmap="gray"
         )
         axs[1, 0].set_title("Reference Target")
         axs[1, 0].axis("off")
         axs[1, 1].imshow(
-            crop(rss_complex(ifft2c(item.distorted_kspace))), cmap="gray"
+            crop(rss_complex(ifft2c_new(item.distorted_kspace))), cmap="gray"
         )
         axs[1, 1].set_title("Distorted Target")
         axs[1, 1].axis("off")

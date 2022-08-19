@@ -4,13 +4,16 @@ Main driver program for k-space discriminator.
 Author(s):
     Michael Yao
 
-Licensed under the MIT License.
+Licensed under the MIT License. Copyright Microsoft Research 2022.
 """
+from args import Main
 import os
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import ModelCheckpoint, TQDMProgressBar
+from pytorch_lightning.callbacks import ModelCheckpoint
+import sys
 import time
-from args import Main
+
+sys.path.append("..")
 from pl_modules.data_module import DataModule
 from pl_modules.discriminator_module import DiscriminatorModule
 
@@ -34,7 +37,7 @@ def main():
     if is_mlp:
         test_dir = coil_prefix + "val"
     else:
-        test_dir = coil_prefix + "test_v2"
+        test_dir = coil_prefix + "test"
 
     data_path = args.data_path
     if data_path is None or len(data_path) == 0:
@@ -47,7 +50,7 @@ def main():
         train_dir=train_dir,
         val_dir=val_dir,
         test_dir=test_dir,
-        batch_size=args.batch_size,
+        batch_size=1,
         num_workers=args.num_workers,
         rotation=args.rotation,
         dx=args.x_range,
@@ -86,13 +89,11 @@ def main():
         save_last=True
     )
 
-    progbar_refresh_rate = 100
-    progressbar_callback = TQDMProgressBar(refresh_rate=progbar_refresh_rate)
     trainer = pl.Trainer(
         max_epochs=args.max_epochs,
         fast_dev_run=args.fast_dev_run,
         log_every_n_steps=log_every_n_steps,
-        callbacks=[checkpoint_callback, progressbar_callback],
+        callbacks=[checkpoint_callback],
         accelerator="auto",
         devices="auto",
         auto_select_gpus=True,

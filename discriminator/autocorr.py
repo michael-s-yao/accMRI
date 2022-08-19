@@ -9,6 +9,7 @@ Author(s):
 Licensed under the MIT License. Copyright Microsoft Research 2022.
 """
 import argparse
+from fastmri.data.mri_data import et_query
 import h5py
 import matplotlib
 import matplotlib.pyplot as plt
@@ -17,42 +18,12 @@ import os
 from pathlib import Path
 import pickle
 import time
-from typing import Dict, Optional, Sequence, Tuple, Union
+from tqdm import tqdm
+from typing import Dict, Optional, Tuple, Union
 import xml.etree.ElementTree as etree
 
 matplotlib.rcParams["mathtext.fontset"] = "stix"
 matplotlib.rcParams["font.family"] = "STIXGeneral"
-
-
-def et_query(
-    root: etree.Element,
-    qlist: Sequence[str],
-    namespace: str = "http://www.ismrm.org/ISMRMRD",
-) -> str:
-    """
-    ElementTree query function. This can be used to query an XML document via
-    ElementTree. It uses qlist for nested queries. This function was taken from
-    the fastmri.data.mri_data module in the fastMRI repo.
-    Input:
-        root: root of the XML to search through.
-        qlist: A list of strings for nested searches.
-        namespace: XML namespace to prepend query.
-    Returns:
-        The returned data as a string.
-    """
-    s = "."
-    prefix = "ismrmrd_namespace"
-
-    ns = {prefix: namespace}
-
-    for el in qlist:
-        s += f"//{prefix}:{el}"
-
-    value = root.find(s, ns)
-    if value is None:
-        raise RuntimeError("Value not found.")
-
-    return str(value.text)
 
 
 def slice_metadata(fn: Union[Path, str]) -> Tuple[Dict, int]:
@@ -278,7 +249,7 @@ def build_args() -> argparse.Namespace:
         "--savepath",
         type=str,
         default="./autocorr",
-        help="Directory to save autocorrelation maps. Default ./autocorr."
+        help="Directory to save autocorrelation maps and pickled dataset."
     )
     parser.add_argument(
         "--cmap",
@@ -289,9 +260,9 @@ def build_args() -> argparse.Namespace:
     parser.add_argument(
         "--plotval",
         type=str,
-        choices=("magnitude", "phase"),
-        default="magnitude",
-        help="Plot either the magnitude or phase of generated heatmaps."
+        choices=("magnitude", "phase", "both"),
+        default="both",
+        help="Plot either the magnitude and/or phase of generated heatmaps."
     )
     parser.add_argument(
         "--cache_path",
@@ -304,6 +275,11 @@ def build_args() -> argparse.Namespace:
         type=str,
         default=None,
         help="Optional cache key specification. Default is data_path value."
+    )
+    parser.add_argument(
+        "--make_plots",
+        action="store_true",
+        help="Flag to save autocorrelation map plots."
     )
 
     return parser.parse_args()
@@ -329,16 +305,24 @@ if __name__ == "__main__":
     if args.savepath.lower() != "none":
         if not os.path.isdir(args.savepath):
             os.mkdir(args.savepath)
-        for i in range(args.center_crop[-1]):
+        correlation_maps = []
+        for i in tqdm(range(args.center_crop[-1])):
+            correlation_maps.append(
+                np.abs(
+                    heatmap(RXX, i, crop_size=args.center_crop)[0, :]
+                ).tolist()
+            )
+            if not args.make_plots:
+                continue
             plt.gca()
-            if args.plotval.lower() == "phase":
+            if args.plotval.lower() in ["phase", "both"]:
                 plt.imshow(
                     scale_factor * np.angle(
                         heatmap(RXX, i, crop_size=args.center_crop)
                     ),
                     cmap=args.cmap
                 )
-            else:
+            if args.plotval.lower() in ["magnitude", "both"]:
                 plt.imshow(
                     scale_factor * np.abs(
                         heatmap(RXX, i, crop_size=args.center_crop)
@@ -360,3 +344,13 @@ if __name__ == "__main__":
                     dpi=600
                 )
             plt.close()
+
+            correlation_maps_path = os.path.abspath(
+                os.path.join(args.savepath, "correlation_maps.pkl")
+            )
+        with open(correlation_maps_path, "w+b") as f:
+            pickle.dump(correlation_maps, f)
+            print(
+                "Saved ground truth correlation maps to",
+                correlation_maps_path
+            )

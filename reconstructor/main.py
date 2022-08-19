@@ -4,14 +4,18 @@ Main driver program for accelerated MRI reconstruction.
 Author(s):
     Michael Yao
 
-Licensed under the MIT License.
+Licensed under the MIT License. Copyright Microsoft Research 2022.
 """
 from args import Main
 import os
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import ModelCheckpoint, TQDMProgressBar
+from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.strategies import DDPStrategy
+import sys
 import time
+import torch
 
+sys.path.append("..")
 from pl_modules.data_module import DataModule
 from pl_modules.reconstructor_module import ReconstructorModule
 
@@ -20,8 +24,6 @@ def main():
     args = Main.build_args()
 
     seed = args.seed
-    if seed is None or seed < 0:
-        seed = int(time.time())
     pl.seed_everything(seed=seed)
 
     coil_prefix = "singlecoil_"
@@ -33,7 +35,12 @@ def main():
 
     data_path = args.data_path
     if data_path is None or len(data_path) == 0:
-        data_path = os.environ.get("AMLT_DATA_DIR", "")
+        data_path = os.environ.get("AMLT_DATA_DIR", "./")
+
+    if args.num_nodes > 1:
+        torch.distributed.init_process_group(
+            backend="nccl", init_method="env://",
+        )
 
     datamodule = DataModule(
         data_path,
@@ -50,6 +57,7 @@ def main():
         num_gpus=args.num_gpus,
         tl=args.tl,
         num_coils=args.num_coils,
+        distributed_sampler=args.use_distributed_sampler
     )
     ewc_dataloader = None
     if args.ewc > 0.0:
@@ -82,17 +90,18 @@ def main():
         monitor="validation_loss",
         save_last=True
     )
-    progbar_refresh_rate = 100
-    progressbar_callback = TQDMProgressBar(refresh_rate=progbar_refresh_rate)
     # Will use GPUs automatically if available.
     trainer = pl.Trainer(
         max_epochs=args.max_epochs,
         fast_dev_run=args.fast_dev_run,
         log_every_n_steps=log_every_n_steps,
-        callbacks=[checkpoint_callback, progressbar_callback],
+        callbacks=[checkpoint_callback],
         default_root_dir=os.environ.get("AMLT_OUTPUT_DIR", None),
-        accelerator="auto",
-        devices="auto",
+        accelerator="gpu",
+        devices=args.num_gpus,
+        num_nodes=args.num_nodes,
+        strategy=DDPStrategy(find_unused_parameters=False),
+        replace_sampler_ddp=(not args.use_distributed_sampler),
         auto_select_gpus=True,
     )
     if args.mode.lower() in ("both", "train"):

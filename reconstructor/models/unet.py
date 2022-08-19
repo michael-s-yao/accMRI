@@ -6,7 +6,7 @@ https://github.com/facebookresearch/fastMRI.
 Author(s):
     Michael Yao
 
-Licensed under the MIT License.
+Licensed under the MIT License. Copyright Microsoft Research 2022.
 """
 from math import floor, ceil
 import torch

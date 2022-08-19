@@ -5,7 +5,7 @@ from the fastMRI repository at https://github.com/facebookresearch/fastMRI.
 Author(s):
     Michael Yao
 
-Licensed under the MIT License.
+Licensed under the MIT License. Copyright Microsoft Research 2022.
 """
 import h5py
 import matplotlib.pyplot as plt
@@ -17,20 +17,6 @@ from typing import Dict, Optional
 
 sys.path.append("..")
 from reconstructor.models.loss import structural_similarity
-
-
-def mse(target: torch.Tensor, pred: torch.Tensor) -> torch.Tensor:
-    """
-    Compute the mean squared error (MSE) between the target and prediction.
-    Input:
-        target: target ground truth tensor.
-        pred: predicted tensor.
-    Returns:
-        MSE(target, pred)
-    """
-    return torch.mean(
-        (target - pred) * (target - pred)
-    ).cpu().detach().numpy()
 
 
 def ssim(
@@ -101,8 +87,6 @@ def save_reconstructions(
             continue
         (save_path / "images" / fname).mkdir(exist_ok=True, parents=True)
         for i in range(recons.shape[0]):
-            if np.max(recons[i]) <= 1.0:
-                recons[i] = recons[i] * 255.0
             plt.imsave(
                 save_path / "images" / fname / (str(i) + ".png"),
                 recons[i],

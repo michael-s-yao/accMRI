@@ -6,18 +6,16 @@ https://github.com/facebookresearch/fastMRI.
 Author(s):
     Michael Yao
 
-Licensed under the MIT License.
+Licensed under the MIT License. Copyright Microsoft Research 2022.
 """
 import numpy as np
-import sys
+from fastmri.fftc import fft2c_new, ifft2c_new
 import torch
 import torchvision.transforms
 from typing import Optional, Sequence, Tuple
 from data.dataset import DiscriminatorSample
 
-sys.path.append("..")
-from helper.utils.math import fft2c, ifft2c
-from helper.utils import transforms as T
+from tools import transforms as T
 
 
 class DiscriminatorDataTransform:
@@ -29,9 +27,9 @@ class DiscriminatorDataTransform:
     def __init__(
         self,
         coil_compression: int = -1,
-        rotation: Sequence[float] = [5.0, 15.0],
-        dx: Sequence[float] = [0.05, 0.1],
-        dy: Sequence[float] = [0.05, 0.1],
+        rotation: Sequence[float] = [20.0, 50.0],
+        dx: Sequence[float] = [0.0, 0.0],
+        dy: Sequence[float] = [0.0, 0.0],
         p_transform: float = 0.5,
         p_spike: float = 0.5,
         max_spikes: int = 10,
@@ -41,8 +39,10 @@ class DiscriminatorDataTransform:
         max_lines_acquiring: int = 12,
         seed: Optional[int] = None,
         is_mlp: bool = True,
-        center_frac: Optional[int] = 0.04,
+        center_frac: Optional[float] = 0.04,
+        center_crop: Optional[Sequence[int]] = None,
         inference: bool = False,
+        accuracy_by_line: bool = False
     ):
         """
         Args:
@@ -71,11 +71,16 @@ class DiscriminatorDataTransform:
             is_mlp: specify whether discriminator is an MLP network.
             center_frac: fraction of low-frequency columns to be retained.
                 Only required is is_mlp is True.
+            center_crop: kspace crop size. Default no cropping.
             inference: whether or not we are running inference.
+            accuracy_by_line: special flag to turn on testing discriminator
+                accuracy by kspace line distance from the center. Only applies
+                wheen running inference.
         """
         self.seed = seed
         self.is_mlp = is_mlp
         self.center_frac = center_frac
+        self.center_crop = center_crop
         self.rng = np.random.RandomState(self.seed)
         torch.manual_seed(self.seed)
 
@@ -103,6 +108,7 @@ class DiscriminatorDataTransform:
         self.min_lines_acquired = min_lines_acquired
         self.max_lines_acquiring = max_lines_acquiring
         self.inference = inference
+        self.accuracy_by_line = accuracy_by_line and self.inference
 
     def __call__(
         self,
@@ -123,6 +129,11 @@ class DiscriminatorDataTransform:
         Returns:
             A DiscriminatorSample object.
         """
+        # Center crop the kspace if necessary.
+        if self.center_crop is not None:
+            kspace = torch.permute(kspace, dims=(0, -1, 1, 2))
+            kspace = T.center_crop(kspace, self.center_crop)
+            kspace = torch.permute(kspace, dims=(0, 2, 3, 1))
         c, h, w, _ = kspace.size()
         lines_acquired = self.rng.randint(self.min_lines_acquired, w)
         lines_acquiring = self.rng.randint(1, self.max_lines_acquiring)
@@ -135,7 +146,7 @@ class DiscriminatorDataTransform:
         lines_acquired = np.where(sampled_mask > 0)[0]
         lines_acquiring = np.where(acquiring_mask > 0)[0]
 
-        cimg = ifft2c(kspace)
+        cimg = ifft2c_new(kspace)
         # 2. Apply affine transform.
         no_affine_transform = self.rotation == (0.0, 0.0)
         no_affine_transform = no_affine_transform and self.dx == (0.0, 0.0)
@@ -165,7 +176,7 @@ class DiscriminatorDataTransform:
             theta, deltax, deltay = 0.0, 0.0, 0.0
             distorted_target = cimg.clone()
 
-        distorted_kspace = fft2c(distorted_target)
+        distorted_kspace = fft2c_new(distorted_target)
 
         # 3. Apply kspace spiking.
         if self.rng.uniform() < self.p:
@@ -272,7 +283,6 @@ class DiscriminatorDataTransform:
             slice_idx,
             kspace,
             distorted_kspace,
-            targ,
             max_value
         )
 
@@ -308,17 +318,23 @@ class DiscriminatorDataTransform:
             lines_acquiring = np.concatenate(
                 (np.arange(0, l_center), np.arange(r_center, w),)
             )
-            if not self.inference:
+            if self.accuracy_by_line:
+                pass
+            elif not self.inference:
                 lines_acquiring = np.array([self.rng.choice(lines_acquiring)])
             else:
-                # Set the possible range of acceleration factors.
-                acceleration_factors = [4.0, 8.0]
-                # Set the number of lines to test.
-                num_lines_acquiring = 12
-                fixed_acceleration = self.rng.choice(acceleration_factors)
-                num_hf_lines_acquired = int(max(
-                    0, (w // fixed_acceleration) - (r_center - l_center)
-                ))
+                num_lines_acquiring = self.rng.randint(
+                    1, self.max_lines_acquiring
+                )
+                num_lines_acquired = max(
+                    self.rng.randint(
+                        self.min_lines_acquired, w - num_lines_acquiring
+                    ),
+                    r_center - l_center
+                )
+                num_hf_lines_acquired = int(
+                    num_lines_acquired - (r_center - l_center)
+                )
                 hf_lines = self.rng.choice(
                     lines_acquiring,
                     size=(num_hf_lines_acquired + num_lines_acquiring),
