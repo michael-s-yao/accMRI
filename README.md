@@ -1,18 +1,17 @@
-# A Practical Framework for Accelerated MRI
+# A Path Towards Clinical Adaptation of Accelerated MRI
 
 [![LICENSE](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE.md)
 [![ORGANIZATION](https://img.shields.io/badge/Microsoft%20Research-0078d4?style=flat&logo=microsoft&logoColor=white)](https://www.microsoft.com/en-us/research/)
 [![CONTACT](https://img.shields.io/badge/contact-michael.yao%40pennmedicine.upenn.edu-blue)](mailto:michael.yao@pennmedicine.upenn.edu)
 
-In this work, we provide a practical framework for accelerated MRI imaging that builds on previous work to learn the following three tasks:
+![Accelerated MRI](docs/abstract.png)
 
-  1. [`reconstructor`](reconstructor): Image reconstruction from sparsely sampled $k$-space data with co-trained sensitivity map estimation.
-  2. [`sampler`](sampler): Active $k$-space sampling to guide sequential MRI acquisition using reinforcement learning.
-  3. [`discriminator`](discriminator): $k$-space fidelity quantification to inform subsequent *re*-sampling of previously acquired $k$-space data.
+Accelerated MRI reconstructs images of clinical anatomies from sparsely sampled signal data to reduce patient scan times. While recent works have leveraged deep learning to accomplish this task, such approaches have often only been explored in simulated environments where there is no signal corruption or resource limitations. In this work, we explore the following augmentations to neural network MRI image reconstructors to enhance their clinical relevancy. Namely,
 
-Our model is (1) agnostic to the input $k$-space sampling pattern, (2) built with the time constants and healthcare costs of clinically-relevant MRI data acquisition and network speeds in mind, and (3) considerant of real-world sources of noise and data corruption. Altogether, our framework can intelligently inform sequential acquision steps while reconstructing the best possible image from the currently available data, and is a step forward towards clinical applicability of accelerated MRI.
-
-We also introduce a sandbox environment for simulating real-time accelerated MRI in future clinical settings (see [`simul`](simul)). 
+  1. (**Detecting Signal Corruption**) We propose a neural network-based approach for detecting sources of image artifacts during signal preprocessing.
+  2. (**Acceleration Factor Balancing**) We demonstrate that training reconstructors on MR signal data with variable acceleration factors can improve their average performance at any time step of a clinical patient scan.
+  3. (**Learning Multiple Anatomies**) We offer a new loss function to overcome catastrophic forgetting when models learn to reconstruct MR images of multiple anatomies and orientations. 
+  4. (**Phantom Pre-Training**) We propose a framework using simulated phantom data to leverage transfer learning for learning to reconstruct other anatomies with limited clinically acquired datasets and compute capabilities.
 
 ## Installation
 
@@ -31,7 +30,7 @@ source env/bin/activate
 pip install -r requirements.txt
 ```
 
-Download and organize the fastMRI single- and/or multi- coil data from the [fastMRI website](https://fastmri.med.nyu.edu/). For example the knee datasets should be organized as follows:
+Download and organize the fastMRI single- and multi- coil data from the [fastMRI website](https://fastmri.med.nyu.edu/). The datasets may be organized as follows:
 
 ```
 └── data
@@ -42,26 +41,43 @@ Download and organize the fastMRI single- and/or multi- coil data from the [fast
         ├── knee_singlecoil_train
         ├── knee_singlecoil_val
         ├── knee_singlecoil_test
+    ├── brain      
+        ├── brain_multicoil_train
+        ├── brain_multicoil_val
+        ├── brain_multicoil_test
+        ├── brain_singlecoil_train
+        ├── brain_singlecoil_val
+        ├── brain_singlecoil_test
 ```
 
-Note that the parent directory `data` is the same as the `data` directory in this repository. For the purposes of testing our models, we note that the fastMRI `test` datasets can only be used for evaluating our reconstructor. Other models, such as those used for active $k$-space sampling and $k$-space fidelity quantification, use a subset of the associated `train` datasets for testing. Each of the relevant modules can be trained and tested by navigating to the associated directory and running the child `main.py` program:
+## Organization
 
-```
-python main.py
-```
+The [`disciminator`](./discriminator) directory contains our implementation for the *k*-space signal corruption detector, while the [`reconstructor`](./reconstructor) directory contains our implementation for our acceleration factor balancing, sequential learning, and transfer learning experiments. Generally speaking, `main.py` trains a model while `infer.py` allows you to run inference using a trained model. In training models using [`reconstructor/main.py`](./reconstructor/main.py), we highlight the following arguments:
 
-Each module also has an associated `README.md` file for reference.
+  - (**Acceleration Factor Balancing**) In our implementation, a model will be trained on variably accelerated data by default. You can set a fixed acceleration factor(s) to use for training using the `--fixed_acceleration` argument.
+  - (**Learning Multiple Anatomies**) In sequentially learning a subsequent reconstruction task, you can specify the EWC weighting parameter in the `--ewc` argument, and a path to the checkpoint file from the previous learning task in the `--ewc_state_dict` argument.
+  - (**Phantom Pre-Training**) To pretrain a model using simulated phantom data, use the `--tl` flag and specify the number of coils to simulate using the `--num_coils` argument (default 15 coils). You can then finetune the pre-trained model by passing it in to the `--ckpt_path` argument in a subsequent run of `main.py`.
+
+For additional details, please run `python main.py --help` (or `python infer.py --help`) within the relevant directory.
 
 ## Contact
 
-Questions and comments are welcome. Suggests can be submitted through Github issues. Contact information is linked below.
+Questions and comments are welcome. Suggestions can be submitted through Github issues. Contact information is linked below.
 
 [Michael Yao](mailto:michael.yao@pennmedicine.upenn.edu)
 
+[Michael Hansen](mailto:michael.hansen@microsoft.com) (*Corresponding Author*)
+
+## Citation
+
+    @article{yao2022accMRI,
+      title={A Path Towards Clinical Adaptation of Accelerated {MRI}},
+      authors={Yao, Michael S. and Hansen, Michael S.},
+      year={2022},
+      doi={},
+      journal={arXiv preprint},
+    }
+
 ## License
 
-This repository is MIT licensed (see [LICENSE](LICENSE.md)). Portions of the code in this repository is adapted from the following sources:
-
-  1. [fastMRI repository](https://github.com/facebookresearch/fastMRI), a collaborative research project between Facebook AI Research (FAIR) and NYU Langone Health.
-  2. [active-mri-acquisition](https://github.com/facebookresearch/active-mri-acquisition), a reinforcement learning environment to facilitate research on active MRI acquisition from Facebook AI Research (FAIR).
-  3. [SeqMRI](https://github.com/tianweiy/SeqMRI), based on the 2021 paper *End-to-End Sequential Sampling and Reconstruction for MR Imaging* by Tianwei Yin and colleagues.
+This repository is MIT licensed (see [LICENSE](LICENSE.md)). Portions of the code in this repository is adapted from the [fastMRI repository](https://github.com/facebookresearch/fastMRI) as part of a collaborative research project between Facebook AI Research (FAIR) and NYU Langone Health.
