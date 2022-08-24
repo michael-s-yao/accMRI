@@ -45,6 +45,7 @@ class ReconstructorModule(pl.LightningModule):
         ewc: Optional[float] = 0.0,
         ewc_dataloader: Optional[torch.utils.data.DataLoader] = None,
         ewc_state_dict: Optional[Union[Path, str]] = None,
+        FIM_cache_path: Optional[Union[Path, str]] = None,
         verbose_inference: bool = False
     ):
         """
@@ -73,6 +74,9 @@ class ReconstructorModule(pl.LightningModule):
                 regularization.
             ewc_state_dict: path to checkpoint file from first learning task
                 in sequential learning. Default None.
+            FIM_cache_path: path to FIM cache path for computing the EWC
+                regularization loss term. If not provided, the diagonal FIM
+                will be constructed at run time.
             verbose_inference: whether we want verbose output during inference.
         """
         super().__init__()
@@ -128,7 +132,7 @@ class ReconstructorModule(pl.LightningModule):
                 model=self.reconstructor,
                 dataloader=ewc_dataloader,
                 lambda_=ewc,
-                fim_cache_path="./knee_multicoil_demo_fim.pkl"
+                fim_cache_path=FIM_cache_path
             )
         else:
             self.ewc_loss = None

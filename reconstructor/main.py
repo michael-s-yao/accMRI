@@ -79,7 +79,8 @@ def main():
         save_reconstructions=args.save_reconstructions,
         ewc=args.ewc,
         ewc_dataloader=ewc_dataloader,
-        ewc_state_dict=args.ewc_state_dict
+        ewc_state_dict=args.ewc_state_dict,
+        FIM_cache_path=args.fim_cache_path
     )
     log_every_n_steps = 1 if args.fast_dev_run else 50
     start = str(int(time.time()))

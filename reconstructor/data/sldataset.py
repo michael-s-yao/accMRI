@@ -262,7 +262,6 @@ class SheppLoganDataset(torch.utils.data.Dataset):
         """
         rotation = (self.rng.random() - 0.5) * np.pi
         center = (self.rng.random() - 0.5, self.rng.random() - 0.5)
-        roll = np.pi * self.rng.random() / 8.0
         roll = np.pi * self.rng.random() / 16.0
         return self._phase_roll(rotation, center, roll)
 
@@ -282,9 +281,9 @@ class SheppLoganDataset(torch.utils.data.Dataset):
 
     def _sens_maps(
         self,
-        relative_radius: float = 2.0,
+        relative_radius: float = 3.0,
         rotation: float = 0.0,
-        normalize: bool = True,
+        normalize: bool = False,
         max_noise: float = 0.01
     ) -> torch.Tensor:
         """
@@ -299,8 +298,6 @@ class SheppLoganDataset(torch.utils.data.Dataset):
         Returns:
             Generated complex sensitivity maps.
         """
-        normalize = False
-        relative_radius = 3.0
         maps = np.zeros(
             (self.num_coils, self.shape[0], self.shape[1]),
             dtype=np.complex64
