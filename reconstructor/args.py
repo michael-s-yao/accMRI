@@ -295,12 +295,5 @@ class Inference:
             default=0,
             help="Number of GPUs to use. Default no GPUs."
         )
-        fim_path_help = "Optional path to FIM cache path for computing the "
-        fim_path_help += "EWC regularization loss term when --ewc > 0. If "
-        fim_path_help += "not provided, the diagonal FIM will be constructed "
-        fim_path_help += "at run time."
-        parser.add_argument(
-            "--fim_cache_path", type=str, default=None, help=fim_path_help
-        )
 
         return parser.parse_args()
