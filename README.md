@@ -70,7 +70,7 @@ Questions and comments are welcome. Suggestions can be submitted through Github 
 
 ## Citation
 
-    @misc{yao2022accMRI,
+    @misc{yao2022path,
       title={A Path Towards Clinical Adaptation of Accelerated {MRI}},
       authors={Yao, Michael S. and Hansen, Michael S.},
       year={2022},
