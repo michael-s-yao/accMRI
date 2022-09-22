@@ -57,7 +57,7 @@ jsonpickle==2.2.0
 jsonschema==4.6.0
 kiwisolver==1.4.2
 knack==0.9.0
-Mako==1.2.0
+Mako>=1.2.2
 Markdown==3.3.7
 MarkupSafe==2.1.1
 marshmallow==3.14.1
@@ -71,7 +71,7 @@ ndg-httpsclient==0.5.1
 networkx==2.8.4
 ntlm-auth==1.5.0
 numpy==1.22.3
-oauthlib==3.2.0
+oauthlib>=3.2.1
 packaging==21.3
 pandas==1.4.3
 paramiko==2.11.0
