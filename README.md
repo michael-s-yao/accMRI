@@ -71,8 +71,8 @@ Questions and comments are welcome. Suggestions can be submitted through Github 
 ## Citation
 
     @misc{yao2022path,
-      title={A Path Towards Clinical Adaptation of Accelerated {MRI}},
-      authors={Yao, Michael S. and Hansen, Michael S.},
+      title={{A Path Towards Clinical Adaptation of Accelerated MRI}},
+      author={Yao, Michael S. and Hansen, Michael S.},
       year={2022},
       eprint={2208.12835},
       archivePrefix={arXiv},

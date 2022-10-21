@@ -83,7 +83,7 @@ Pillow==9.1.1
 pkginfo==1.8.2
 portalocker==2.4.0
 prompt-toolkit==3.0.29
-protobuf==3.20.1
+protobuf>=3.20.2
 pyarrow==3.0.0
 pyasn1==0.4.8
 pyasn1-modules==0.2.8
