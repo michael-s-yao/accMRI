@@ -70,13 +70,17 @@ Questions and comments are welcome. Suggestions can be submitted through Github 
 
 ## Citation
 
-    @misc{yao2022path,
-      title={{A Path Towards Clinical Adaptation of Accelerated MRI}},
+    @InProceedings{pmlr-v193-yao22a,
+      title={A Path Towards Clinical Adaptation of Accelerated {MRI}},
       author={Yao, Michael S. and Hansen, Michael S.},
+      booktitle={Proceedings of the 2nd Machine Learning for Health symposium},
+      pages={489-511},
       year={2022},
-      eprint={2208.12835},
-      archivePrefix={arXiv},
-      primaryClass={eess.IV},
+      volume={193},
+      series={Proceedings of Machine Learning Research},
+      publisher={PMLR},
+      pdf={https://proceedings.mlr.press/v193/yao22a/yao22a.pdf},
+      url={https://proceedings.mlr.press/v193/yao22a.html},
     }
 
 ## License
